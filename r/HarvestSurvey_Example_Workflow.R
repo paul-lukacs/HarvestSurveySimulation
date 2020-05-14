@@ -40,7 +40,7 @@
   completeSample <- svytotal( ~harvest, survDataComplete ) # run the analysis
   
   # harvest estimate with missing data from non-response
-  tmp <- filter( harvestData, respond == 1 ) # filter down to the sampled hunters
+  tmp <- filter( harvestData, respond == 1 ) # filter down to the responding hunters
   
   # create the survey design object (this uses the survey package)
   survDataNonresponse <- svydesign( ~1,                                 # sample ID's (we don't have any yet)
@@ -48,5 +48,4 @@
                                  data = tmp )                         # data set
   
   nonResponseSample <- svytotal( ~harvest, survDataNonresponse ) # run the analysis
-  
   
