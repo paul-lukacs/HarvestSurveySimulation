@@ -27,24 +27,26 @@
   
   ######### analyze the data ############################
   
-  trueHarvest <- sum(harvestData$harvest) # sum of success is the number harvested
+  trueHarvest <- sum( harvestData$harvest ) # sum of success is the number harvested
   
   # harvest estimate with complete sample data
   tmp <- filter( harvestData, sampled == 1 ) # filter down to the sampled hunters
   
+  # create the survey design object (this uses the survey package)
   survDataComplete <- svydesign( ~1,                                 # sample ID's (we don't have any yet)
                                 probs = nrow(tmp)/nrow(harvestData), # sampling probability
                                 data = tmp )                         # data set
   
-  completeSample <- svytotal( ~harvest, survDataComplete )
+  completeSample <- svytotal( ~harvest, survDataComplete ) # run the analysis
   
   # harvest estimate with missing data from non-response
   tmp <- filter( harvestData, respond == 1 ) # filter down to the sampled hunters
   
+  # create the survey design object (this uses the survey package)
   survDataNonresponse <- svydesign( ~1,                                 # sample ID's (we don't have any yet)
                                  probs = nrow(tmp)/nrow(harvestData), # sampling probability
                                  data = tmp )                         # data set
   
-  nonResponseSample <- svytotal( ~harvest, survDataNonresponse )
+  nonResponseSample <- svytotal( ~harvest, survDataNonresponse ) # run the analysis
   
   
