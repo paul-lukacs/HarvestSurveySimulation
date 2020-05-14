@@ -10,7 +10,8 @@
   nHunters <- 1000   # number of hunters
   pSuccess <- 0.4    # probability of successful harvest
   pSample  <- 0.6    # probability that a hunter is selected to receive a survey
-  pRespond <- 0.8    # probability that a hunter responds to the survey
+  pResponseSuccess <- 0.8   # probability of a successful hunter responding
+  pResponseFail <- 0.6      # probability of an unsuccessful hunter responding
   
   harvestData <- matrix( NA, nrow=nHunters, ncol=3 ) # matrix to hold harvest survey data
   colnames(harvestData) <- c( "harvest", "sampled", "respond" )
@@ -21,9 +22,18 @@
   for( i in 1:nHunters ){
     harvestData[i,1] <- rbinom( 1, 1, pSuccess ) # did the hunter harvest (0/1)
     harvestData[i,2] <- rbinom( 1, 1, pSample )  # was the hunter selected for a survey (0/1)
-    harvestData[i,3] <- rbinom( 1, 1, pRespond ) # did the hunter respond to the survey (0/1)
   }
+  
+  for( i in 1:nHunters ){
+    if (harvestData[i, 1] == TRUE){
+      harvestData[i, 3] <- rbinom (1, 1, pResponseSuccess)
+    }
+      else{
+        harvestData[i, 3] <- rbinom (1, 1, pResponseFail)
+      }
+    }
   harvestData <- as.data.frame( harvestData )
+
   
   ######### analyze the data ############################
   
@@ -48,4 +58,5 @@
                                  data = tmp )                         # data set
   
   nonResponseSample <- svytotal( ~harvest, survDataNonresponse ) # run the analysis
+
   
