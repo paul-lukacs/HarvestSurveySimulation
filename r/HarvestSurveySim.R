@@ -12,10 +12,10 @@
 # Response is not calculated by this function
 
 # ARGUMENTS:
-# n = pop size
+# n         = pop size
 # pSuccess1 = prob. of hunter group 1 harvesting
 # pSuccess2 = prob. of hunter group 2 harvesting. Is equal to pSuccess1 by default (for scenarios where all hunters are equally likely to harvest)
-# pSample = probability a hunter is sampled.
+# pSample   = probability a hunter is sampled.
 
 popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample){  
  
@@ -59,89 +59,55 @@ popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample){
 
 ########## Survey generator function ##########
 
-# This will return an array with each consecutive third dimension being a simulation of survey response by increasing levels based on the input for argument "suc". 
+# This will return an array with each consecutive third dimension being a simulation of (cont.)
+# survey response by increasing levels based on the inputs for arguments "suc" and "uns". 
+# sequences for these two arguments must be of equal length and be of length 2-10
 
 # ARGUMENTS: 
-# "x" = a list, from popgen() output
-# "suc" = a seq() with length >2 and <=9 that dictates response rates of successful hunters
-# "uns" = same as suc, but seq() of response rates for unsuccessful hunters.
+# "x"   = a list, from popgen() output
+# "suc" = a seq() that dictates response rates of successful hunters
+# "uns" = same as "suc" by default, but is also seq() of response rates for unsuccessful hunters if specified
 
 survgen <- function (x, suc, uns = suc){
   
   
 #### First some quick checks to make sure sequences were inputted correctly:
-  if (length (suc) > 9 || length (suc) <= 2 || length (uns) > 9 || length (uns) <= 2){
-    stop("length of responding rate sequences must be > 2 and <= 9")
+  
+  if (length (suc) > 10 || length (uns) >10 || length (suc) < 2 || length (uns) < 2 ){
+    stop("Lengths of sequences too long or short (must be between 2 and 10)")
   }
+  
   if (length (suc) != length (uns)){
     stop ("length of 'suc' & 'uns' must be of equal length")
   }
   
   
-#### Now to create the array with row and column length of sampled hunters, and replicate by as many terms as in given sequence
+  
+#### Now to create the array with row and column length of sampled hunters, and replicate by as many terms as in length(suc)
   
   samp <- array(x[[2]], dim = c(nrow(x[[2]]), ncol(x[[2]]), length(suc)))  
   
   colnames(samp) <- c("Group", "Harvest", "Sampled", "Response")
-  dimnames (samp)[[3]] <- c(as.character(suc))  # Adding reporting %'s for easier recall
-  y <- x[[2]][ ,2]                              # Extracting whether hunter had successful harvest or not to be later evaluated if T or F when assigning response rates below.
+  dimnames(samp)[[3]] <- c(as.character(suc))   # Adding reporting %'s for easier recall
+  y <- x[[2]][ ,2]                              # Extracting whether hunter had successful harvest or not to be (cont.)
+                                                # later evaluated if T or F when assigning response rates below.
   
   
 #### Now to fill in the array:
   
   for (j in 1:nrow(samp)){
     if (y [j] == 1){
-      samp [j , 4, 1] <- rbinom (1, 1, suc[1])    # For first layer of array apply response based off prob. suc[1] (prob. that a successful hunter responds, level 1)
-      samp [j , 4, 2] <- rbinom (1, 1, suc[2])    # For second layer apply response of prob. suc[2]..... etc.
-      if (length(suc) > 2){                       # Will only execute if length of given "suc" is > 2
-        samp [j , 4, 3] <- rbinom (1, 1, suc[3])
-      }
-      if (length(suc) > 3){
-        samp [j , 4, 4] <- rbinom (1, 1, suc[4])
-      }
-      if (length(suc) > 4){
-        samp [j , 4, 5] <- rbinom (1, 1, suc[5])
-      }
-      if (length(suc) > 5){
-        samp [j , 4, 6] <- rbinom (1, 1, suc[6])
-      }
-      if (length(suc) > 6){
-        samp [j , 4, 7] <- rbinom (1, 1, suc[7])
-      }
-      if (length(suc) > 7){
-        samp [j , 4, 8] <- rbinom (1, 1, suc[8])
-      }
-      if (length(suc) > 8){
-        samp [j , 4, 9] <- rbinom (1, 1, suc[9])
-      }}
+      for (k in 1:length(suc)){
+        samp [j , 4, k] <- rbinom (1, 1, suc[k])  # For all layers of array apply response based off prob. suc[k] (haha)
+      }                                           # suc[k] = prob. that a successful hunter responds based on given seq() for argument "suc" at position k
+      
+    }
     else {
-      samp [j , 4, 1] <- rbinom (1, 1, uns[1])    # For first layer of array apply response based off prob. uns[1] (prob. that an unsuccessful hunter responds, level 1)
-      samp [j , 4, 2] <- rbinom (1, 1, uns[2])    # For second layer apply response of prob. uns[2]..... etc.
-      if (length(suc) > 2){                       # Will only execute if length of given "suc" is > 2
-        samp [j , 4, 3] <- rbinom (1, 1, uns[3])
-      }
-      if (length(suc) > 3){
-        samp [j , 4, 4] <- rbinom (1, 1, uns[4])
-      }
-      if (length(suc) > 4){
-        samp [j , 4, 5] <- rbinom (1, 1, uns[5])
-      }
-      if (length(suc) > 5){
-        samp [j , 4, 6] <- rbinom (1, 1, uns[6])
-      }
-      if (length(suc) > 6){
-        samp [j , 4, 7] <- rbinom (1, 1, uns[7])
-      }
-      if (length(suc) > 7){
-        samp [j , 4, 8] <- rbinom (1, 1, uns[8])
-      }
-      if (length(suc) > 8){
-        samp [j , 4, 9] <- rbinom (1, 1, uns[9])
+      for (k in 1:length(suc)){
+        samp [j , 4, k] <- rbinom (1, 1, uns[k])  # For first layer of array apply response based off prob. uns[k] (prob. that an unsuccessful hunter responds.)
       }
     }
   }
-  
-  
   return(samp)
 }
 ########## SCENARIO 1: Simple Random Sample by phone w/ follow-up ###########################
@@ -174,7 +140,7 @@ for (i in 1:9){                                       # In this case, there are 
 
 ########## Example: Medium pop. w/ successful and unsuccessful hunters not equally likely to report. ###########
 
-# Simulate a population of 1,000; split into groups of hunters with different rates of harvest (0.35 or 0.25) which are split evenly (for an average harvest rate of 30%) and all have a probability of being sampled = 0.5
+# First, simulate a population of 1,000; split into groups of hunters with different rates of harvest (0.35 or 0.25) which are split evenly (for an average harvest rate of 30%) and all have a probability of being sampled = 0.5
 
 s1.Mpop.NRbias <- popgen (n = 1000, pSuccess1 = 0.35, pSuccess2 = 0.20, pSample = 0.5)  
 
@@ -184,7 +150,7 @@ s1.Mpop.NRbias[["true harvest"]]                 # Reports total harvest
 
 
 
-# Now input s1.Mpop.NRbias to survgen() function to complete "response" column for varying levels of response
+# Now input s1.Mpop.NRbias to survgen() function to simulate response for varying levels of response
 
 s1.Mpop.NRbias.surv <- survgen (s1.Mpop.NRbias, suc = seq (0.3, 0.9, 0.1), uns = seq (0.1, 0.7, 0.1))   # Simulate response if population "s1.Mpop.NRbias" responds to surveys with different probabilities for successful and unsuccessful hunters
 
