@@ -251,14 +251,18 @@ volpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc, uns = 0, FUS = 
   # Follow up survey:
   if (FUS == TRUE){
     for (i in 1:(nrow(init.surv))){ 
-      init.surv[i, 4, ] <- ifelse (init.surv[i, 3, ] == FALSE,            # If hunter didn't voluntarily report
-                                   rbinom(length(suc), 1, FUSprob),       # Simulate sampled or not for FUS
-                                   NA)                                    # Otherwise, they already responded and shouldn't be sampled.                  
-    }
-    for (i in 1:(nrow(init.surv))){ 
-      init.surv[i, 5, ] <- ifelse (init.surv[i, 4, ] == TRUE,             # If nonresponding hunter was selected for FUS
-                                   rbinom(length(suc), 1, suc),           # simulate response for FUS
-                                   NA)                                    # Otherwise, they weren't selected.                  
+      init.surv[i, 4, ] <- ifelse (init.surv[i, 3, ] == FALSE,           # If hunter didn't voluntarily report
+                                   rbinom(length(suc), 1, FUSprob),      # Simulate sampled or not for FUS
+                                   0)                                    # Otherwise, they already responded and shouldn't be sampled
+      
+      init.surv[i, 5, ] <- ifelse (init.surv[i, 4, ] == TRUE,            # If nonresponding hunter was selected for FUS
+                                   rbinom(length(suc), 1, suc),          # simulate response for FUS
+                                   0)                                    # Otherwise, they weren't selected.
+      
+      # If they responded the first time, copy that to the second survey responses
+      init.surv[i, 5, ] <- ifelse (init.surv[i, 3, ] == TRUE,
+                                   1,
+                                   init.surv[i, 5, ])
     }
   }
   
@@ -291,8 +295,9 @@ apply(s1.bias20[["0.5"]], 2, mean)
 
 ########## SCENARIO 2: Voluntary self report, w/ follow up ##########
 
-# 20% less likely to have a voluntary response from an unsuccessful hunter voluntarily. All hunters equally likely (based on argument "suc") to respond to a follow up survey given to 20% of nonrespondents.
+# 20% less likely to have a response from an unsuccessful hunter voluntarily. All hunters equally likely (based on argument "suc") to respond to a follow up survey given to 20% of nonrespondents.
 s2.bias20 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 20, FUS = T, FUSprob = 0.2)
+s2.bias20[["0.5"]]
 apply(s2.bias20[["0.3"]], 2, mean, na.rm = TRUE)
 
 #30% "
@@ -308,6 +313,7 @@ apply(s2.bias40[["0.3"]], 2, mean, na.rm = TRUE)
 # Same scenarios as scenario 2, just without follow ups
 #20% reporting bias
 s3.bias20 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 20)
+s3.bias20[["0.3"]]
 apply(s3.bias20[["0.3"]], 2, mean, na.rm = TRUE)
 
 #30% bias
@@ -320,21 +326,6 @@ apply(s3.bias40[["0.3"]], 2, mean, na.rm = TRUE)
 
 ########## SCENARIO 4: Mandatory reporting for successful hunters ##########
 
-# Population of 10k, with varying levels of reporting rates for successful hunters only. Unsucccessful hunters not reportng.
+# Population of 10k, with varying levels of reporting rates for successful hunters only. Unsuccessful hunters not reporting.
 s4 <- mandpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 1, 0.1)) 
 apply(s4[["0.5"]], 2, mean)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
