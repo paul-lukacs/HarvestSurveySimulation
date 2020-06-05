@@ -16,16 +16,16 @@
 # suc       = a probability, or seq() of probabilities that dictates response rates of successful hunters
 # uns       = 0 by default, but a percentage to scale suc by. e.g. if you want unsuccessful hunters to be 20% less likely to respond, input 20 to argument. 
 # FUS       = FALSE by default but can be TRUE to conduct a follow up survey of nonrespondents
-# FUSscale  = scales original "suc" and "uns" arguments (i.e. suc * FUSscale). Default is 1, meaning if not specified everyone re-sampled will respond w/ the same prob. as originally defined in suc and uns.
+# FUSscale  = Scales original response probs. Can be interpreted as, "hunters selected for follow up surveys respond "FUSscale"% less than they would have to the original survey. 
 
-popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample, suc, uns = 0, FUS = FALSE, FUSscale = 1){
+popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample, suc, uns = 0, FUS = FALSE, FUSscale = 0){
   
   # First some quick checks to make sure arguments were inputted correctly:
   if (length (suc) > 10|| length (suc) < 1){
-    stop("Length of 'suc' too long or short (must be of length 1-10)")
+    stop("\n\tLength of 'suc' too long or short (must be of length 1-10)", .call = FALSE)
   }
-  if (FUSscale <= 0 || FUSscale > 1){
-    stop("FUSscale must be larger than 0 and less than or equal to 1")
+  if (FUSscale < 0 || FUSscale >= 100){
+    stop("FUSscale must be 0-100. Cannot equal 100")
   }
   if (class(FUS) != "logical"){
     stop("FUS must be T/F")
@@ -46,8 +46,7 @@ popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample, suc, uns = 0, 
   
   # Create initial matrix to eventually hold all population data
   pop <- matrix (NA, nrow = n, ncol = 4)		                # Creating initial matrix with row length n.
-  columns <- c("Group", "Harvest", "Sampled", "Response")
-  colnames(pop) <- columns
+  colnames(pop) <- c("Group", "Harvest", "Sampled", "Response")
   
   if (FUS == TRUE){                                         # Make columns for follow up survey
     FUSmat <- matrix(NA, nrow = n, ncol = 1)
@@ -56,22 +55,18 @@ popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample, suc, uns = 0, 
   }
   
   # Start filling in matrix "pop"
-  z <- row(pop)                                             # Extracting row numbers from matrix "pop"
-  z <- z[ ,1]                                               # Turning it into a vector containing row numbers
   
-  pop [ , 1] <- ifelse (z <= n/2,
-                        1,
-                        0)                                  # Fill in "Group" column with 1st half of pop. = 1 and 2nd half = 0
+  pop [ , 1] <- rbinom (n, 1, 0.5)                          # Split population into two equal groups
   
   pop [ , 2] <- ifelse (pop [ , 1] == 1, 
                         rbinom (length(pop), 1, pSuccess1), 
                         rbinom (length(pop), 1, pSuccess2)) # Simulate "Harvest" for both groups
   
-  pop [ , 3] <- rbinom (length(z), 1, pSample)              # Sampled or not?
+  pop [ , 3] <- rbinom (n, 1, pSample)                      # Sampled or not?
   sampled <- subset (pop, pop [ , 3] == TRUE)               # Creating new matrix of sampled hunters only
   
   
-  # Simulate hunter response to initial surveys.
+  # Create an array that copies sampled population matrix by length(suc) times.
   init.surv <- array(sampled, dim = c(nrow(sampled), ncol(sampled), length(suc)))  
   
   colnames(init.surv) <- colnames(pop)
@@ -93,8 +88,8 @@ popgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, pSample, suc, uns = 0, 
   # Conduct any follow up surveys:
   
   if (FUS == TRUE){
-      suc <- suc*FUSscale                                                   # Scale original response probs.
-      uns <- uns*FUSscale
+      suc <- suc*(1-(FUSscale/100))                                         # Scale original response probs.
+      uns <- uns*(1-(FUSscale/100))
       for (i in 1:(nrow(init.surv))){ 
         init.surv[i, 5, ] <- ifelse (init.surv[i, 4, ] == FALSE,            # If hunter didn't respond to initial survey....
                                        ifelse(init.surv[i, 2, ] == TRUE,    # (Column 2 is harvest)
@@ -136,17 +131,11 @@ mandpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc){
   
   # Create initial matrix to eventually hold all population data
   pop <- matrix (NA, nrow = n, ncol = 3)		                # Creating initial matrix with row length n.
-  columns <- c("Group", "Harvest", "Response")
-  colnames(pop) <- columns
+  colnames(pop) <- c("Group", "Harvest", "Response")
   
   
   # Start filling in matrix "pop"
-  z <- row(pop)                                             # Extracting row numbers from matrix "pop"
-  z <- z[ ,1]                                               # Turning it into a vector containing row numbers
-  
-  pop [ , 1] <- ifelse (z <= n/2,
-                        1,
-                        0)                                  # Fill in "Group" column with 1st half of pop. = 1 and 2nd half = 0
+  pop [ , 1] <- rbinom (n, 1, 0.5)                           # Split population into two equal groups
   
   pop [ , 2] <- ifelse (pop [ , 1] == 1, 
                         rbinom (length(pop), 1, pSuccess1), 
@@ -155,7 +144,7 @@ mandpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc){
   sampled <- subset (pop, pop [ , 2] == TRUE)               # Creating new matrix conatining only hunters that harvested
   
   
-  # Simulate hunter response.
+  # Create array that will hold hunter response sims.
   init.surv <- array(sampled, dim = c(nrow(sampled), ncol(sampled), length(suc)))  
   
   colnames(init.surv) <- colnames(pop)
@@ -208,8 +197,7 @@ volpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc, uns = 0, FUS = 
   
   # Create initial matrix to eventually hold all population data
   pop <- matrix (NA, nrow = n, ncol = 3)		                # Creating initial matrix with row length n.
-  columns <- c("Group", "Harvest", "Report")
-  colnames(pop) <- columns
+  colnames(pop) <- c("Group", "Harvest", "Response")
   
   if (FUS == TRUE){                                         # Make columns for follow up survey
     FUSmat <- matrix(NA, nrow = n, ncol = 2)
@@ -218,12 +206,7 @@ volpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc, uns = 0, FUS = 
   }
   
   # Start filling in matrix "pop"
-  z <- row(pop)                                             # Extracting row numbers from matrix "pop"
-  z <- z[ ,1]                                               # Turning it into a vector containing row numbers
-  
-  pop [ , 1] <- ifelse (z <= n/2,
-                        1,
-                        0)                                  # Fill in "Group" column with 1st half of pop. = 1 and 2nd half = 0
+  pop [ , 1] <- rbinom (n, 1, 0.5)                          # Split population into two equal groups
   
   pop [ , 2] <- ifelse (pop [ , 1] == 1, 
                         rbinom (length(pop), 1, pSuccess1), 
@@ -281,7 +264,7 @@ volpopgen <- function (n, pSuccess1, pSuccess2 = pSuccess1, suc, uns = 0, FUS = 
 # sample ~ 55% of population
 # simulate response where successful and unsuccessful hunters are equally likely to respond from 20-100% by 10% increments.
 # And simulate follow up survey where nonrespondents are half as likely to respond as they were to the orig. survey.
-s1.equal <- popgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, pSample = 0.55, suc = seq(0.2, 1, 0.1), FUS = TRUE, FUSscale = 0.5)
+s1.equal <- popgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, pSample = 0.55, suc = seq(0.2, 1, 0.1), FUS = TRUE, FUSscale = 50)
 
 s1.equal[["n"]]
 head(s1.equal[["complete pop"]])
@@ -289,7 +272,7 @@ s1.equal[["true harvest"]]
 apply(s1.equal[["0.5"]], 2, mean)
 
 # Same as above, but unsuccessful hunters are 20% less likely to respond than successful hunters.
-s1.bias20 <- popgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, pSample = 0.55, suc = seq(0.2, 1, 0.1), uns = 20, FUS = T, FUSscale = 0.5)
+s1.bias20 <- popgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, pSample = 0.55, suc = seq(0.2, 1, 0.1), uns = 20, FUS = T, FUSscale = 50)
 
 apply(s1.bias20[["0.5"]], 2, mean)
 
@@ -298,15 +281,15 @@ apply(s1.bias20[["0.5"]], 2, mean)
 # 20% less likely to have a response from an unsuccessful hunter voluntarily. All hunters equally likely (based on argument "suc") to respond to a follow up survey given to 20% of nonrespondents.
 s2.bias20 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 20, FUS = T, FUSprob = 0.2)
 s2.bias20[["0.5"]]
-apply(s2.bias20[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s2.bias20[["0.3"]], 2, mean)
 
 #30% "
 s2.bias30 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 30, FUS = T, FUSprob = 0.2)
-apply(s2.bias30[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s2.bias30[["0.3"]], 2, mean)
 
 #40% "
 s2.bias40 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 40, FUS = T, FUSprob = 0.2)
-apply(s2.bias40[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s2.bias40[["0.3"]], 2, mean)
 
 ########## SCENARIO 3: Voluntary self report, w/o follow up ##########
 
@@ -314,18 +297,25 @@ apply(s2.bias40[["0.3"]], 2, mean, na.rm = TRUE)
 #20% reporting bias
 s3.bias20 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 20)
 s3.bias20[["0.3"]]
-apply(s3.bias20[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s3.bias20[["0.3"]], 2, mean)
 
 #30% bias
 s3.bias30 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 30)
-apply(s3.bias30[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s3.bias30[["0.3"]], 2, mean)
 
 #40% bias
 s3.bias40 <- volpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 0.5, 0.1), uns = 40)
-apply(s3.bias40[["0.3"]], 2, mean, na.rm = TRUE)
+apply(s3.bias40[["0.3"]], 2, mean)
 
 ########## SCENARIO 4: Mandatory reporting for successful hunters ##########
 
 # Population of 10k, with varying levels of reporting rates for successful hunters only. Unsuccessful hunters not reporting.
 s4 <- mandpopgen(n = 10000, pSuccess1 = 0.4, pSuccess2 = 0.2, suc = seq(0.1, 1, 0.1)) 
 apply(s4[["0.5"]], 2, mean)
+
+########## Analyzing data ##########
+
+
+
+
+)
