@@ -4,15 +4,14 @@ library(dplyr) ; library(purrr)
 
 # Simulates a simple random sample of n hunters
 # Returns a single tibble
-# tibble will be of length n*length(pResp)
-  # Where pResp contains a sequence of levels of response to be simulated
-  # e.g. if n = 10 and pResp = c(0.5, 0.6) the length of tibble will = 10*2 = 20
+# tibble will be of length n*length(pResp),
+#   where pResp contains a sequence of levels of response to be simulated
+#   e.g. if n = 10 and pResp = c(0.5, 0.6) the length of tibble will = 10*2 = 20
 # For values in columns pop_size:sample, values will be repeated every nth row
-  # i.e. the same population is used for all levels of different response rates.
+#   i.e. the same population is used for all levels of different response rates.
 # Column "fus_resp" populates NAs for hunters who already responded.
 
 # Usage and Arguments ==========================================================
-# 
 # 
 # simple(n, 
 #        split = 0.7, 
@@ -28,19 +27,19 @@ library(dplyr) ; library(purrr)
 # split         Proportion of the population that is placed into group 1
 # pSuccess1     Probability of hunter in group 1 to harvest
 # pSuccess2     Probability of hunter in group 2 to harvest
-# Sample        Probability a hunter is chosen for survey
+# pSample       Probability a hunter is chosen for survey
 # pResp         Response probability/probabilities for UNSUCCESSFUL hunters.
 # scale.pResp   Scales pResp to create probabilities for SUCCESSFUL hunters.
 #                 should be > 1
 # fus           Logical. Change to TRUE if follow up surveys to be done
 # fus.scale     Scales probabilities of response to initial surveys, creating
-#                 O0OOnew probabilities of response for follow up surveys.
-#                 must be < 1
+#                 new probabilities of response for follow up surveys.
+#                 must be < 1. 
 
 # simple() function body =======================================================
 
 simple <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1, pSample,
-                     pResp, scale.pResp = 1, fus = FALSE, fus.scale = 1){
+                   pResp, scale.pResp = 1, fus = FALSE, fus.scale = 1){
   
   # Create initial population data:
   init_pop <- tibble(
@@ -61,27 +60,29 @@ simple <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1, pSample,
       call. = FALSE
     )
   }
-    
+  
   # Now take initial population data, and make copies of it:
   full_sim <- map_dfr(seq_along(pResp), ~ init_pop) %>%
-    # Next two lines create response rate columns
-    mutate(uns_resp_rate = rep(pResp, each = n)) %>% 
-    mutate(suc_resp_rate = rep(pResp, each = n)*scale.pResp) %>% 
-    # if suc_resp_rate is > 1, make it = 1:
-    mutate(suc_resp_rate = 
-             case_when(
-               suc_resp_rate > 1 ~ 1,
-               TRUE              ~ suc_resp_rate
-             )) %>% 
-    # Simulate response:
-    mutate(init_resp = 
-             case_when(
-               harvest == 1 ~ rbinom(n*length(pResp), 1, suc_resp_rate),
-               harvest == 0 ~ rbinom(n*length(pResp), 1, uns_resp_rate),
-               TRUE         ~ NA_integer_
-             )
+    # Now add columns for response:
+    mutate(
+      uns_resp_rate = rep(pResp, each = n),
+      suc_resp_rate = rep(pResp, each = n)*scale.pResp,
+      # if suc_resp_rate is > 1, make it = 1:
+      suc_resp_rate = 
+        case_when(
+          suc_resp_rate > 1 ~ 1,
+          TRUE              ~ suc_resp_rate
+        ),
+      # and then simulate response:
+      init_resp = 
+        case_when(
+          harvest == 1 ~ rbinom(n*length(pResp), 1, suc_resp_rate),
+          harvest == 0 ~ rbinom(n*length(pResp), 1, uns_resp_rate),
+          TRUE         ~ NA_integer_
+        )
     )
-  # If the TRUE statement above executed, something went wrong:
+  
+  # If the TRUE statement above added NA's, something went wrong:
   if (some(full_sim$init_resp, is.na)){
     stop("NA in init_resp when there shouldn't be.", call. = FALSE)
   }
@@ -95,31 +96,36 @@ simple <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1, pSample,
     
     # Create response probabilities column for follow up survey and simulate:
     full_sim <- full_sim %>% 
-      mutate(fus_uns_resp_rate = uns_resp_rate*fus.scale) %>% 
-      mutate(fus_suc_resp_rate = suc_resp_rate*fus.scale) %>% 
-      mutate(fus_resp = 
-               case_when(
-                 harvest == 1 & init_resp == 0
-                  ~ rbinom(n*length(pResp), 1, fus_suc_resp_rate),
-                 
-                 harvest == 0 & init_resp == 0
-                  ~ rbinom(n*length(pResp), 1, fus_uns_resp_rate),
-                 
-                 init_resp == 1 
-                  ~ NA_integer_,
-                 
-                 TRUE         
-                  ~ NA_integer_
-               )
+      mutate(
+        # Determine new response rates to follow ups:
+        fus_uns_resp_rate = uns_resp_rate*fus.scale,
+        fus_suc_resp_rate = suc_resp_rate*fus.scale,
+        # Simulate response to follow ups:
+        fus_resp = 
+          case_when(
+            harvest == 1 & init_resp == 0
+            ~ rbinom(n*length(pResp), 1, fus_suc_resp_rate),
+            
+            harvest == 0 & init_resp == 0
+            ~ rbinom(n*length(pResp), 1, fus_uns_resp_rate),
+            
+            init_resp == 1 
+            ~ NA_integer_,
+            
+            TRUE         
+            ~ NA_integer_
+          )
       )
   }
-    return(full_sim)
+  return(full_sim)
 }
+
+
 
 # Example ======================================================================
 
 # A population of 1,000.
-# 70% of the pop is in group 1, the other 30% in group 0
+# 70% of the pop is in group 1, the other 30% in group 0 (the default)
 # Group 1 harvests at a prob. of 0.25
 # Group 0 at a prob. of 0.7, for a population avg. harvest rate of 38.5%
 # Probability a hunter is sampled is 0.5
@@ -142,8 +148,6 @@ example <- simple(n = 1000,
 
 # Avg. of columns
 map_dfr(example, mean, na.rm = TRUE)
-  # Note that avg. suc_resp_rate != uns_resp_rate*1.2 because 
-  # some uns_resp_rates are already 1. 
 
 # Avg. of harvest by group
 example %>% 
