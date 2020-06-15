@@ -413,7 +413,7 @@ s2_estimator <- function(x){
       scenario      = 2L,
       resp_bias     = NA,
       estimate      = sum(init_resp, na.rm = TRUE),
-      estimate_SE   = 0
+      estimate_SE   = 0,
       true_harvest  = mean(true_harvest),
       relative_bias = (estimate / true_harvest) - 1,
     )
