@@ -288,11 +288,14 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 # Estimator functions ==========================================================
 
 # All estimator functions report an estimate of harvest, standard error,
-# and relative bias, calculated as 1-(est harvest / true harvest), among
+# and relative bias, calculated as (est harvest / true harvest) - 1, among
 # other important metadata. Returns a tibble.
 
 # All estimator functions, except s2_estimator(), use svytotal() to estimate
 # total harvest, and a fpc to scale standard error. 
+
+# All estimator functions are called by scenario function (described below),
+# so these functions never need to be explicitly typed out. 
 
 # s1_estimator() ===============================================================
 #
@@ -374,7 +377,7 @@ s1_estimator <- function(x, level){
       follow_up_SE    = as.vector(SE(fus_est)),
       combined_est    = as.vector(combined_est),
       true_harvest    = x$true_harvest[[1]],
-      relative_bias   = 1 - (as.vector(combined_est) / x$true_harvest[[1]])
+      relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
   }
   
@@ -388,7 +391,7 @@ s1_estimator <- function(x, level){
       initial_est     = as.vector(init_est),
       initial_SE      = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
-      relative_bias   = 1 - (as.vector(init_est) / x$true_harvest[[1]])
+      relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
     )
   }
   return(out)
@@ -410,13 +413,15 @@ s2_estimator <- function(x){
       scenario      = 2L,
       resp_bias     = NA,
       estimate      = sum(init_resp, na.rm = TRUE),
+      estimate_SE   = 0
       true_harvest  = mean(true_harvest),
-      relative_bias = 1 - (estimate / true_harvest),
+      relative_bias = (estimate / true_harvest) - 1,
     )
   
   #re-arrange so data is similar looking to other functions:
-  out <- out %>% 
-    select(scenario, resp_bias, resp_rate, everything())
+  out <- out %>%
+    select(scenario, resp_bias, resp_rate, everything()) %>% 
+    rename(response_rate = resp_rate)
   
   return(out)
 }
@@ -449,9 +454,9 @@ s3_estimator <- function(x, level){
     resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
     response_rate   = level,
     initial_est     = as.vector(init_est),
-    initial_SE         = as.vector(SE(init_est)),
+    initial_SE      = as.vector(SE(init_est)),
     true_harvest    = x$true_harvest[[1]],
-    relative_bias   = 1 - (as.vector(init_est) /x$true_harvest[[1]])
+    relative_bias   = (as.vector(init_est) /x$true_harvest[[1]]) - 1
   )
   
   return(out)
@@ -499,7 +504,7 @@ s4_estimator <- function(x, level){
     initial_est     = as.vector(init_est),
     initial_SE      = as.vector(SE(init_est)),
     true_harvest    = x$true_harvest[[1]],
-    relative_bias   = 1 - (as.vector(init_est) / x$true_harvest[[1]])
+    relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
   )
   
   return(out)
@@ -578,7 +583,7 @@ s5_estimator <- function(x, level){
       follow_up_SE    = as.vector(SE(fus_est)),
       combined_est    = as.vector(combined_est),
       true_harvest    = x$true_harvest[[1]],
-      relative_bias   = 1 - (as.vector(combined_est) / x$true_harvest[[1]])
+      relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
   }
   
@@ -592,16 +597,138 @@ s5_estimator <- function(x, level){
       initial_est     = as.vector(init_est),
       initial_SE      = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
-      relative_bias   = 1 - (as.vector(init_est) / x$true_harvest[[1]])
+      relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
     )
   }
   return(out)
 }
 
+# Sim and analysis functions ===================================================
+
+# s1, s3, s4, s5 all take one argument, the response bias desired. intended to
+# be passed by map() function. 
+
+# e.g.: map_dfr(c(1, 1.2, 1.4), s1) will evaluate s1 at each response bias given
+# simulating population using simple() and obtaining estimates using 
+# s1_estimator.
+
+# Should be used as map_dfr(c(desired response biases), sX), 
+# Where X is the desired scenario.
+
+
+# s1() ===========================================================================
+
+s1 <- function(scale.pResp){
+  
+  
+  fuss1         <- TRUE     # do a follow up
+  fus.scales1   <- 0.5      # hunters half as likely to respond to follow up, 
+  #   relative to initial
+  
+  # Simulate population:
+  dat <- simple(n           = n,
+                split       = split,
+                pSuccess1   = pSuccess1,
+                pSuccess2   = pSuccess2,
+                pSample     = pSample,
+                pResp       = pResp,
+                scale.pResp = scale.pResp,
+                fus         = fuss1,
+                fus.scale   = fus.scales1)
+  
+  # s1: estimates:
+  s1_estimates <-  unique(dat$uns_resp_rate) %>% 
+    map_dfr(s1_estimator, x = dat)
+  
+  # output:
+  return(s1_estimates)
+}
+
+# s2() ===========================================================================
+
+s2 <- function(){
+  
+  # s2: Simulating population
+  s2 <- mand(n, split, pSuccess1, pSuccess2, pResp)
+  
+  # s2: Analysis
+  s2_estimates <- s2_estimator(s2)
+  
+  return(s2_estimates)
+}
+
+# s3() ===========================================================================
+
+s3 <- function(scale.pResp){
+  
+  # s3: Simulating population 
+  dat <- voluntary(n           = n,
+                   split       = split,
+                   pSuccess1   = pSuccess1,
+                   pSuccess2   = pSuccess2,
+                   pResp       = pResp,
+                   scale.pResp = scale.pResp)
+  
+  # s3: Analysis
+  s3_estimates <-  unique(dat$uns_resp_rate) %>% 
+    map_dfr(s3_estimator, x = dat)
+  
+  return(s3_estimates)
+  
+}
+
+# s4() ===========================================================================
+
+s4 <- function(scale.pResp){
+  
+  # s4: Simulating population
+  dat <- voluntary(n           = n,
+                   split       = split,
+                   pSuccess1   = pSuccess1,
+                   pSuccess2   = pSuccess2,
+                   pResp       = pResp,
+                   scale.pResp = scale.pResp)
+  
+  # s4: Analysis 
+  s4_estimates <-  unique(dat$uns_resp_rate) %>% 
+    map_dfr(s4_estimator, x = dat)
+  
+  return(s4_estimates)
+}
+
+# s5() ===========================================================================
+
+s5 <- function(scale.pResp){
+  
+  # s5: Simulating population:
+  fuss5         <- TRUE     # do a follow-up this time.
+  fus.pSamples5 <- 0.2      # when 0.2, sample 2/10th of non-reporters.
+  fus.scales5   <- 1        # when 1, equally as likely to respond to follow up 
+  #                               as were to originally self-report. 
+  
+  dat <- voluntary(n             = n,
+                   split         = split,
+                   pSuccess1     = pSuccess1,
+                   pSuccess2     = pSuccess2,
+                   pResp         = pResp,
+                   scale.pResp   = scale.pResp,
+                   fus           = fuss5,
+                   fus.pSample   = fus.pSamples5,
+                   fus.scale     = fus.scales5)
+  
+  # s5: Analysis 
+  s5_estimates <-  unique(dat$uns_resp_rate) %>% 
+    map_dfr(s5_estimator, x = dat)
+  
+  return(s5_estimates)
+}
+
 # Environment ==================================================================
 
-# Below are variables that can be used in each scenario.
-# Each scenario will have other arguments specific to the scenario.
+# Below are variables that will be used in each scenario.
+# Each scenario will have other arguments specific to the scenario, which are
+# defined in their respective scenario functions. (i.e. s1(), s2(), s3()....)
+
 n           <- 10000    # pop. size
 split       <- 0.7      # proportion of hunters being in group 1
 pSuccess1   <- 0.25     # probability of harvest for group 1
