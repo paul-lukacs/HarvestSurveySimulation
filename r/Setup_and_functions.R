@@ -1,4 +1,17 @@
 # Functions needed for surveys and analysis: ===================================
+
+# Below are all the functions needed to run the simulations and analyses
+# script. 
+
+# You will not find descriptions of each scenario here, but within each
+# scenario on the simulation and analyses script. 
+
+# use the variables listed under "Environment" on this script to change
+# variables for ALL scenarios.
+
+# Changing variables within each scenario, (e.g. do a follow up survey),
+# will likely lead to errors.
+
 # simple() =====================================================================
 # 
 # Creates a tibble containing a simple random sample of hunters
@@ -292,9 +305,9 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 # other important metadata. Returns a tibble.
 
 # All estimator functions, except s2_estimator(), use svytotal() to estimate
-# total harvest, and a fpc to scale standard error. 
+# total harvest. 
 
-# All estimator functions are called by scenario function (described below),
+# All sx_estimator() functions are called by their respective sx()functions,
 # so these functions never need to be explicitly typed out. 
 
 # s1_estimator() ===============================================================
@@ -375,7 +388,7 @@ s1_estimator <- function(x, level){
       initial_SE      = as.vector(SE(init_est)),
       follow_up_est   = as.vector(fus_est),
       follow_up_SE    = as.vector(SE(fus_est)),
-      combined_est    = as.vector(combined_est),
+      complete_est    = as.vector(combined_est),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
@@ -388,7 +401,7 @@ s1_estimator <- function(x, level){
       scenario        = 1L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
       response_rate   = level,
-      initial_est     = as.vector(init_est),
+      complete_est    = as.vector(init_est),
       initial_SE      = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
@@ -578,10 +591,10 @@ s5_estimator <- function(x, level){
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
       response_rate   = level,
       initial_est     = as.vector(init_est),
-      initial_SE         = as.vector(SE(init_est)),
+      initial_SE      = as.vector(SE(init_est)),
       follow_up_est   = as.vector(fus_est),
       follow_up_SE    = as.vector(SE(fus_est)),
-      combined_est    = as.vector(combined_est),
+      complete_est    = as.vector(combined_est),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
@@ -594,7 +607,7 @@ s5_estimator <- function(x, level){
       scenario        = 5L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
       response_rate   = level,
-      initial_est     = as.vector(init_est),
+      complete_est    = as.vector(init_est),
       initial_SE      = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
@@ -605,122 +618,219 @@ s5_estimator <- function(x, level){
 
 # Sim and analysis functions ===================================================
 
-# s1, s3, s4, s5 all take one argument, the response bias desired. intended to
-# be passed by map() function. 
+# s1, s3, s4, s5 all take two arguments; the response bias desired, and the
+# amount of times to simulate each level of bias.
+# s2 takes 1 argument, the amount of times to repeat the simulation. 
 
-# e.g.: map_dfr(c(1, 1.2, 1.4), s1) will evaluate s1 at each response bias given
-# simulating population using simple() and obtaining estimates using 
-# s1_estimator.
-
-# Should be used as map_dfr(c(desired response biases), sX), 
-# Where X is the desired scenario.
+# e.g.: s1(c(1, 1.2), 20) will evaluate s1 at each response bias given 20 times.
+# simulates population using simple() and obtains estimates using 
+# s1_estimator internally.
 
 
-# s1() ===========================================================================
+# s1() =========================================================================
 
-s1 <- function(scale.pResp){
+s1 <- function(respbias, times){
   
+  # We need to define some functions first. 
+  # "worker" does the work... it creates the populations, and analyzes them. 
+  # it analyzes each level of response rate seperately, and each level of 
+  # response rate contains the same exact population (with diff. response sims).
+  worker <- function(respbias){
+    
+    fuss1         <- TRUE     # do a follow up
+    fus.scales1   <- 0.5      # hunters half as likely to respond to follow up, 
+    #   relative to initial
+    
+    # Simulate population:
+    dat <- simple(n           = n,
+                  split       = split,
+                  pSuccess1   = pSuccess1,
+                  pSuccess2   = pSuccess2,
+                  pSample     = pSample,
+                  pResp       = pResp,
+                  scale.pResp = respbias,
+                  fus         = fuss1,
+                  fus.scale   = fus.scales1)
+    
+    # s1: estimates:
+    s1_estimates <-  unique(dat$uns_resp_rate) %>% 
+      map_dfr(s1_estimator, x = dat)
+    
+    # output:
+    return(s1_estimates)
+  }
   
-  fuss1         <- TRUE     # do a follow up
-  fus.scales1   <- 0.5      # hunters half as likely to respond to follow up, 
-  #   relative to initial
+  # "gluer()" makes "worker()" do a new analysis for each level of
+  # response bias, and then "glues" all the tibbles together into one. 
+  gluer <- function(respbias){
+    map_dfr(respbias, worker)
+  }
   
-  # Simulate population:
-  dat <- simple(n           = n,
-                split       = split,
-                pSuccess1   = pSuccess1,
-                pSuccess2   = pSuccess2,
-                pSample     = pSample,
-                pResp       = pResp,
-                scale.pResp = scale.pResp,
-                fus         = fuss1,
-                fus.scale   = fus.scales1)
+  # Define how many times to repeat the simulation for each response bias.
+  # e.g. if arg. "respbias" was c(1, 1.1) and arg. "times" was 5, this outputs:
+  # 1, 1, 1, 1, 1, 1.1, 1.1, 1.1, 1.1, 1.1
+  times <- rep(respbias, each = times)
   
-  # s1: estimates:
-  s1_estimates <-  unique(dat$uns_resp_rate) %>% 
-    map_dfr(s1_estimator, x = dat)
-  
-  # output:
-  return(s1_estimates)
+  # And then tell "gluer()" to tell "worker()" to do a new simulation for
+  # each element contained in "times":
+  out <- map_dfr(times, gluer)
+  return(out)
 }
 
-# s2() ===========================================================================
+# s2() =========================================================================
 
-s2 <- function(){
+s2 <- function(times){
   
-  # s2: Simulating population
-  s2 <- mand(n, split, pSuccess1, pSuccess2, pResp)
+  # "worker" simulates population and does analyses:
+  worker <- function(){
+    # s2: Simulating population
+    dat <- mand(n, split, pSuccess1, pSuccess2, pResp)
+    
+    # s2: Analysis
+    s2_estimates <- s2_estimator(dat)
+    return(s2_estimates)
+  }
   
-  # s2: Analysis
-  s2_estimates <- s2_estimator(s2)
-  
-  return(s2_estimates)
+  # Tell "worker()" to work "times" times.
+  out <- vector(mode = "list", length = times)
+  for(i in 1:times){
+    out[[i]] <- worker()
+  }
+  out <- bind_rows(out)
+  return(out)
 }
 
-# s3() ===========================================================================
+# s3() =========================================================================
 
-s3 <- function(scale.pResp){
+s3 <- function(respbias, times){
   
-  # s3: Simulating population 
-  dat <- voluntary(n           = n,
-                   split       = split,
-                   pSuccess1   = pSuccess1,
-                   pSuccess2   = pSuccess2,
-                   pResp       = pResp,
-                   scale.pResp = scale.pResp)
+  # "worker()" does the work... it creates the populations, and analyzes them. 
+  # it analyzes each level of response rate seperately, and then combines them
+  # all into one dataframe. 
+  worker <- function(respbias){
+    # Simulate population 
+    dat <- voluntary(n           = n,
+                     split       = split,
+                     pSuccess1   = pSuccess1,
+                     pSuccess2   = pSuccess2,
+                     pResp       = pResp,
+                     scale.pResp = respbias)
+    
+    # Analysis
+    s3_estimates <-  unique(dat$uns_resp_rate) %>% 
+      map_dfr(s3_estimator, x = dat)
+    
+    return(s3_estimates)
+  }
   
-  # s3: Analysis
-  s3_estimates <-  unique(dat$uns_resp_rate) %>% 
-    map_dfr(s3_estimator, x = dat)
+  # "gluer()" makes "worker()" run once for each level of
+  # response bias, and then glues all the tibbles created by it 
+  # together into one.   
+  gluer <- function(respbias){
+    map_dfr(respbias, worker)
+  }
   
-  return(s3_estimates)
+  # Define how many times to repeat the simulation for each response bias.
+  # e.g. if arg. "respbias" was c(1, 1.1) and arg. "times" was 5, this outputs:
+  # 1, 1, 1, 1, 1, 1.1, 1.1, 1.1, 1.1, 1.1
+  times <- rep(respbias, each = times)
   
+  # And then tell "gluer()" to tell "worker()" to do a new simulation for
+  # each element now contained in "times":
+  out <- map_dfr(times, gluer)
+  return(out)
 }
 
-# s4() ===========================================================================
+# s4() =========================================================================
 
-s4 <- function(scale.pResp){
+s4 <- function(respbias, times){
   
-  # s4: Simulating population
-  dat <- voluntary(n           = n,
-                   split       = split,
-                   pSuccess1   = pSuccess1,
-                   pSuccess2   = pSuccess2,
-                   pResp       = pResp,
-                   scale.pResp = scale.pResp)
+  # "worker()" does the work... it creates the populations, and analyzes them. 
+  # it analyzes each level of response rate seperately, and then combines them
+  # all into one dataframe.
+  worker <- function(respbias){
+    # simulate population
+    dat <- voluntary(n           = n,
+                     split       = split,
+                     pSuccess1   = pSuccess1,
+                     pSuccess2   = pSuccess2,
+                     pResp       = pResp,
+                     scale.pResp = respbias)
+    
+    # Analysis:
+    s4_estimates <-  unique(dat$uns_resp_rate) %>% 
+      map_dfr(s4_estimator, x = dat)
+    
+    return(s4_estimates)
+  }
   
-  # s4: Analysis 
-  s4_estimates <-  unique(dat$uns_resp_rate) %>% 
-    map_dfr(s4_estimator, x = dat)
   
-  return(s4_estimates)
+  # "gluer()" makes "worker()" run once for each level of
+  # response bias, and then glues all the tibbles created by it 
+  # together into one.  
+  gluer <- function(respbias){
+    map_dfr(respbias, worker)
+  }
+  
+  # Define how many times to repeat the simulation for each response bias.
+  # e.g. if arg. "respbias" was c(1, 1.1) and arg. "times" was 5, this outputs:
+  # 1, 1, 1, 1, 1, 1.1, 1.1, 1.1, 1.1, 1.1
+  times <- rep(respbias, each = times)
+  
+  # And then tell "gluer()" to tell "worker()" to do a new simulation for
+  # each element contained in "times":
+  out <- map_dfr(times, gluer)
+  return(out)
 }
 
-# s5() ===========================================================================
 
-s5 <- function(scale.pResp){
+# s5() =========================================================================
+
+s5 <- function(respbias, times){
   
-  # s5: Simulating population:
-  fuss5         <- TRUE     # do a follow-up this time.
-  fus.pSamples5 <- 0.2      # when 0.2, sample 2/10th of non-reporters.
-  fus.scales5   <- 1        # when 1, equally as likely to respond to follow up 
-  #                               as were to originally self-report. 
+  # "worker()" does the work... it creates the populations, and analyzes them. 
+  # it analyzes each level of response rate seperately, and then combines them
+  # all into one dataframe. 
+  worker <- function(respbias){
+    # s5: Simulating population:
+    fuss5         <- TRUE     # do a follow-up this time.
+    fus.pSamples5 <- 0.2      # when 0.2, sample 2/10th of non-reporters.
+    fus.scales5   <- 1        # when 1, equally as likely to respond to follow up 
+    #                               as were to originally self-report. 
+    
+    dat <- voluntary(n             = n,
+                     split         = split,
+                     pSuccess1     = pSuccess1,
+                     pSuccess2     = pSuccess2,
+                     pResp         = pResp,
+                     scale.pResp   = respbias,
+                     fus           = fuss5,
+                     fus.pSample   = fus.pSamples5,
+                     fus.scale     = fus.scales5)
+    
+    # s5: Analysis 
+    s5_estimates <-  unique(dat$uns_resp_rate) %>% 
+      map_dfr(s5_estimator, x = dat)
+    
+    return(s5_estimates)
+  }
   
-  dat <- voluntary(n             = n,
-                   split         = split,
-                   pSuccess1     = pSuccess1,
-                   pSuccess2     = pSuccess2,
-                   pResp         = pResp,
-                   scale.pResp   = scale.pResp,
-                   fus           = fuss5,
-                   fus.pSample   = fus.pSamples5,
-                   fus.scale     = fus.scales5)
+  # "gluer()" makes "worker()" run once for each level of
+  # response bias, and then glues all the tibbles created by it 
+  # together into one. 
+  gluer <- function(respbias){
+    map_dfr(respbias, worker)
+  }
   
-  # s5: Analysis 
-  s5_estimates <-  unique(dat$uns_resp_rate) %>% 
-    map_dfr(s5_estimator, x = dat)
+  # Define how many times to repeat the simulation for each response bias.
+  # e.g. if arg. "respbias" was c(1, 1.1) and arg. "times" was 5, this outputs:
+  # 1, 1, 1, 1, 1, 1.1, 1.1, 1.1, 1.1, 1.1
+  times <- rep(respbias, each = times)
   
-  return(s5_estimates)
+  # And then tell "gluer()" to tell "worker()" to do a new simulation for
+  # each element contained in "times":
+  out <- map_dfr(times, gluer)
+  return(out)
 }
 
 # Environment ==================================================================
@@ -735,6 +845,9 @@ pSuccess1   <- 0.25     # probability of harvest for group 1
 pSuccess2   <- 0.65     # probability of harvest for group 2, 37% avg.
 pSample     <- 0.5      # probability a single hunter is sampled
 pResp       <- 
-  seq(0.2, 1, 0.1)    # probabilities for response to survey. 
-# note, for simple() and voluntary() this applies to
-# unsuccessful hunters.
+  seq(0.2, 1, 0.1)      # probabilities for response to survey. 
+#                         note, for simple() and voluntary() this applies to
+#                         unsuccessful hunters.
+times       <- 100      # how many times to simulate each response bias in 
+#                         each scenario?
+
