@@ -22,7 +22,7 @@ s1_averages <- s1_estimates %>% group_by(resp_bias) %>%
 s2_estimates <- s2(times)
 
 # Summarise all those iterations:
-s1_averages <- s1_estimates %>% group_by(resp_bias) %>% 
+s2_averages <- s2_estimates %>% group_by(resp_bias) %>% 
   summarise(
     mean_relative_bias = mean(relative_bias)
   )

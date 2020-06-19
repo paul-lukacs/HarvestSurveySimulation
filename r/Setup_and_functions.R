@@ -317,8 +317,6 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 # respondents, and another for follow up respondents. The function then returns 
 # svytotal()  outputs for both of these designs, and reports the true harvest 
 # for pop. It also creates a combined estimate between the two. 
-# Can be used outside of map(), but designed to be the .f argument 
-# in map()
 #
 # s1_estimator(x, level)
 #
@@ -379,16 +377,22 @@ s1_estimator <- function(x, level){
     # Step 2, apply proportions and combine:
     combined_est <- (init_est*init_prop)+(fus_est*fus_prop)
     
+    # Now to calculate SE for it:
+    # Make a SE function:
+    se <- function(q) sqrt(var(q, na.rm = TRUE)/length(q))
+    # extract population size:
+    N <- x$pop_size[[1]]
+    
+    combined_SE <- (N * init_prop * se(init_resp_only$harvest)) +
+      (N * fus_prop  * se(fus_resp_only$harvest))
+    
     # Create output:
     out <- tibble(
       scenario        = 1L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      response_rate   = level,
-      initial_est     = as.vector(init_est),
-      initial_SE      = as.vector(SE(init_est)),
-      follow_up_est   = as.vector(fus_est),
-      follow_up_SE    = as.vector(SE(fus_est)),
-      complete_est    = as.vector(combined_est),
+      resp_rate       = level,
+      est_harvest     = as.vector(combined_est),
+      est_SE          = combined_SE,
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
@@ -400,9 +404,9 @@ s1_estimator <- function(x, level){
     out <- tibble(
       scenario        = 1L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      response_rate   = level,
-      complete_est    = as.vector(init_est),
-      initial_SE      = as.vector(SE(init_est)),
+      resp_rate       = level,
+      est_harvest     = as.vector(init_est),
+      est_SE          = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
     )
@@ -425,16 +429,15 @@ s2_estimator <- function(x){
     summarise(
       scenario      = 2L,
       resp_bias     = NA,
-      estimate      = sum(init_resp, na.rm = TRUE),
-      estimate_SE   = 0,
+      est_harvest   = sum(init_resp, na.rm = TRUE),
+      est_SE        = 0L,
       true_harvest  = mean(true_harvest),
-      relative_bias = (estimate / true_harvest) - 1,
+      relative_bias = (est_harvest / true_harvest) - 1,
     )
   
   #re-arrange so data is similar looking to other functions:
   out <- out %>%
-    select(scenario, resp_bias, resp_rate, everything()) %>% 
-    rename(response_rate = resp_rate)
+    select(scenario, resp_bias, resp_rate, everything()) 
   
   return(out)
 }
@@ -465,9 +468,9 @@ s3_estimator <- function(x, level){
   out <- tibble(
     scenario        = 3L,
     resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-    response_rate   = level,
-    initial_est     = as.vector(init_est),
-    initial_SE      = as.vector(SE(init_est)),
+    resp_rate       = level,
+    est_harvest     = as.vector(init_est),
+    est_SE          = as.vector(SE(init_est)),
     true_harvest    = x$true_harvest[[1]],
     relative_bias   = (as.vector(init_est) /x$true_harvest[[1]]) - 1
   )
@@ -513,9 +516,9 @@ s4_estimator <- function(x, level){
   out <- tibble(
     scenario        = 4L,
     resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-    response_rate   = level,
-    initial_est     = as.vector(init_est),
-    initial_SE      = as.vector(SE(init_est)),
+    resp_rate       = level,
+    est_harvest     = as.vector(init_est),
+    est_SE          = as.vector(SE(init_est)),
     true_harvest    = x$true_harvest[[1]],
     relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
   )
@@ -585,16 +588,23 @@ s5_estimator <- function(x, level){
     # Step 2, apply proportions and combine:
     combined_est <- (init_est*init_prop)+(fus_est*fus_prop)
     
+    # Now to calculate SE for combined est:
+    # Make a SE function:
+    se <- function(q) sqrt(var(q, na.rm = TRUE)/length(q))
+    # extract population size:
+    N <- x$pop_size[[1]]
+    
+    combined_SE <- (N * init_prop * se(init_resp_only$harvest)) +
+      (N * fus_prop  * se(fus_resp_only$harvest))
+    
+    
     # Create output:
     out <- tibble(
       scenario        = 5L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      response_rate   = level,
-      initial_est     = as.vector(init_est),
-      initial_SE      = as.vector(SE(init_est)),
-      follow_up_est   = as.vector(fus_est),
-      follow_up_SE    = as.vector(SE(fus_est)),
-      complete_est    = as.vector(combined_est),
+      resp_rate       = level,
+      est_harvest     = as.vector(combined_est),
+      est_SE          = combined_SE,
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
     )
@@ -606,9 +616,9 @@ s5_estimator <- function(x, level){
     out <- tibble(
       scenario        = 5L,
       resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      response_rate   = level,
-      complete_est    = as.vector(init_est),
-      initial_SE      = as.vector(SE(init_est)),
+      resp_rate       = level,
+      est_harvest     = as.vector(init_est),
+      est_SE          = as.vector(SE(init_est)),
       true_harvest    = x$true_harvest[[1]],
       relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
     )
@@ -618,13 +628,15 @@ s5_estimator <- function(x, level){
 
 # Sim and analysis functions ===================================================
 
+# All return a single tibble 
+
 # s1, s3, s4, s5 all take two arguments; the response bias desired, and the
 # amount of times to simulate each level of bias.
 # s2 takes 1 argument, the amount of times to repeat the simulation. 
 
 # e.g.: s1(c(1, 1.2), 20) will evaluate s1 at each response bias given 20 times.
 # simulates population using simple() and obtains estimates using 
-# s1_estimator internally.
+# s1_estimator() internally.
 
 
 # s1() =========================================================================
