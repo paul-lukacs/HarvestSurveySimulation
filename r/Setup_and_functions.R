@@ -301,8 +301,8 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 # Estimator functions ==========================================================
 
 # All estimator functions report an estimate of harvest, standard error,
-# and relative bias, calculated as (est harvest / true harvest) - 1, among
-# other important metadata. Returns a tibble.
+# and percent error, calculated as (abs(estimate - truth) / truth) * 100, 
+# among other important metadata. Returns a tibble.
 
 # All estimator functions, except s2_estimator(), use svytotal() to estimate
 # total harvest. 
@@ -314,9 +314,9 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 #
 # Calculates harvest estimates for scenario 1.
 # It creates two survey designs using survey::svydesign(). One for inital 
-# respondents, and another for follow up respondents. The function then returns 
-# svytotal()  outputs for both of these designs, and reports the true harvest 
-# for pop. It also creates a combined estimate between the two. 
+# respondents, and another for follow up respondents. The function then 
+# estimates svytotal() for both of these designs and creates a combined estimate
+# from them.
 #
 # s1_estimator(x, level)
 #
@@ -326,9 +326,14 @@ voluntary <- function(n, split = 0.7, pSuccess1, pSuccess2 = pSuccess1,
 
 s1_estimator <- function(x, level){
   
-  # Filter down to the population and response rate specified:
+  # Extract true harvest and pop size, to be used throughout function:
+  thvst <- x$true_harvest[[1]]
+  N <- x$pop_size[[1]]
+  
+  # Filter down to the population at response rate specified:
   pop <- x %>% 
     filter(near(uns_resp_rate, level))
+  
   # Filter down to intial respondents only.
   init_resp_only <- pop %>% 
     filter(init_resp == 1)
@@ -342,7 +347,7 @@ s1_estimator <- function(x, level){
   # create strata table for post-stratification:
   strata <- data.frame(
     group = c(1, 0),
-    Freq  = c(sum(pop$group), pop$pop_size[[1]]-sum(pop$group))
+    Freq  = c(sum(pop$group), N-sum(pop$group))
   )
   
   # post-stratify:
@@ -364,7 +369,7 @@ s1_estimator <- function(x, level){
                             fpc   = ~pop_size)
     
     # post-stratify:
-    fus_design <- postStratify(fus_design, ~group, strata)
+    fus_design <- postStratify(fus_design, ~group, strata, partial = TRUE)
     
     #estimate total harvest:
     fus_est <- svytotal(~harvest, fus_design)
@@ -380,35 +385,35 @@ s1_estimator <- function(x, level){
     # Now to calculate SE for it:
     # Make a SE function:
     se <- function(q) sqrt(var(q, na.rm = TRUE)/length(q))
-    # extract population size:
-    N <- x$pop_size[[1]]
     
     combined_SE <- (N * init_prop * se(init_resp_only$harvest)) +
       (N * fus_prop  * se(fus_resp_only$harvest))
     
     # Create output:
     out <- tibble(
-      scenario        = 1L,
-      resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      resp_rate       = level,
-      est_harvest     = as.vector(combined_est),
-      est_SE          = combined_SE,
-      true_harvest    = x$true_harvest[[1]],
-      relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
+      scenario      = "1",
+      pop_size      = N,
+      p_sample      = sum(pop$sample) / N,
+      resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+      resp_rate     = as.character(level),
+      est_harvest   = as.vector(combined_est),
+      est_SE        = combined_SE,
+      true_harvest  = thvst,
+      percent_error = (abs(est_harvest - thvst) / thvst) * 100
     )
-  }
-  
-  else{
+  } else {
     
     # Create output:
     out <- tibble(
-      scenario        = 1L,
-      resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      resp_rate       = level,
-      est_harvest     = as.vector(init_est),
-      est_SE          = as.vector(SE(init_est)),
-      true_harvest    = x$true_harvest[[1]],
-      relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
+      scenario      = "1",
+      pop_size      = N,
+      p_sample      = sum(pop$sample) / N,
+      resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+      resp_rate     = as.character(level),
+      est_harvest   = as.vector(init_est),
+      est_SE        = as.vector(SE(init_est)),
+      true_harvest  = thvst,
+      percent_error = (abs(est_harvest - thvst) / thvst) * 100
     )
   }
   return(out)
@@ -427,20 +432,23 @@ s2_estimator <- function(x){
     group_by(resp_rate) %>% 
     
     summarise(
-      scenario      = 2L,
-      resp_bias     = NA,
+      scenario      = "2",
+      pop_size      = x$pop_size[[1]],
+      p_sample      = NA,
+      resp_bias     = NA_character_,
       est_harvest   = sum(init_resp, na.rm = TRUE),
       est_SE        = 0L,
       true_harvest  = mean(true_harvest),
-      relative_bias = (est_harvest / true_harvest) - 1,
+      percent_error = (abs(est_harvest - true_harvest) / true_harvest) * 100
     )
   
   #re-arrange so data is similar looking to other functions:
   out <- out %>%
-    select(scenario, resp_bias, resp_rate, everything()) 
+    select(scenario:resp_bias, resp_rate, everything()) 
   
   return(out)
 }
+
 
 # s3_estimator() ===============================================================
 #
@@ -466,13 +474,15 @@ s3_estimator <- function(x, level){
   
   # Create output:
   out <- tibble(
-    scenario        = 3L,
-    resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-    resp_rate       = level,
-    est_harvest     = as.vector(init_est),
-    est_SE          = as.vector(SE(init_est)),
-    true_harvest    = x$true_harvest[[1]],
-    relative_bias   = (as.vector(init_est) /x$true_harvest[[1]]) - 1
+    scenario      = 3L,
+    pop_size      = x$pop_size[[1]],
+    p_sample      = NA_integer_,
+    resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+    resp_rate     = as.character(level),
+    est_harvest   = as.vector(init_est),
+    est_SE        = as.vector(SE(init_est)),
+    true_harvest  = x$true_harvest[[1]],
+    percent_error = (abs(est_harvest - true_harvest) / true_harvest) * 100
   )
   
   return(out)
@@ -514,17 +524,20 @@ s4_estimator <- function(x, level){
   
   # now create output:
   out <- tibble(
-    scenario        = 4L,
-    resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-    resp_rate       = level,
-    est_harvest     = as.vector(init_est),
-    est_SE          = as.vector(SE(init_est)),
-    true_harvest    = x$true_harvest[[1]],
-    relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
+    scenario      = "4",
+    pop_size      = x$pop_size[[1]],
+    p_sample      = NA_integer_,
+    resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+    resp_rate     = as.character(level),
+    est_harvest   = as.vector(init_est),
+    est_SE        = as.vector(SE(init_est)),
+    true_harvest  = x$true_harvest[[1]],
+    percent_error = (abs(est_harvest - true_harvest) / true_harvest) * 100
   )
   
   return(out)
 }
+
 # s5_estimator() ===============================================================
 
 # This is the same exact function as s1_estimator() except for a single line. 
@@ -535,6 +548,10 @@ s4_estimator <- function(x, level){
 # so it is # of respondents / pop. size
 
 s5_estimator <- function(x, level){
+  
+  # Extract true harvest and pop size, to be used throughout function:
+  thvst <- x$true_harvest[[1]]
+  N <- x$pop_size[[1]]
   
   # Filter down to the population and response rate specified:
   pop <- x %>% 
@@ -574,7 +591,7 @@ s5_estimator <- function(x, level){
                             fpc   = ~pop_size)
     
     # post-stratify:
-    fus_design <- postStratify(fus_design, ~group, strata)
+    fus_design <- postStratify(fus_design, ~group, strata, partial = TRUE)
     
     #estimate total harvest:
     fus_est <- svytotal(~harvest, fus_design)
@@ -582,7 +599,7 @@ s5_estimator <- function(x, level){
     # now combine the two estimates for a total est:
     # Step 1, define scaling proportions:
     init_prop <- mean(pop$init_resp, na.rm = TRUE) # The prop. of respondents to 
-                # self-report IS the proportion of the population who reported. 
+    # self-report IS the proportion of the population who reported. 
     fus_prop  <- 1-init_prop  # assume fus respondents make the rest of the pop.
     
     # Step 2, apply proportions and combine:
@@ -591,8 +608,6 @@ s5_estimator <- function(x, level){
     # Now to calculate SE for combined est:
     # Make a SE function:
     se <- function(q) sqrt(var(q, na.rm = TRUE)/length(q))
-    # extract population size:
-    N <- x$pop_size[[1]]
     
     combined_SE <- (N * init_prop * se(init_resp_only$harvest)) +
       (N * fus_prop  * se(fus_resp_only$harvest))
@@ -600,27 +615,30 @@ s5_estimator <- function(x, level){
     
     # Create output:
     out <- tibble(
-      scenario        = 5L,
-      resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      resp_rate       = level,
-      est_harvest     = as.vector(combined_est),
-      est_SE          = combined_SE,
-      true_harvest    = x$true_harvest[[1]],
-      relative_bias   = (as.vector(combined_est) / x$true_harvest[[1]]) - 1
+      scenario      = "1",
+      pop_size      = N,
+      p_sample      = sum(pop$fus_sample, na.rm = TRUE) / 
+        (N - sum(pop$init_resp)),
+      resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+      resp_rate     = as.character(level),
+      est_harvest   = as.vector(combined_est),
+      est_SE        = combined_SE,
+      true_harvest  = thvst,
+      percent_error = (abs(est_harvest - thvst) / thvst) * 100
     )
-  }
-  
-  else{
+  } else {
     
     # Create output:
     out <- tibble(
-      scenario        = 5L,
-      resp_bias       = x$suc_resp_rate[[1]]/x$uns_resp_rate[[1]],
-      resp_rate       = level,
-      est_harvest     = as.vector(init_est),
-      est_SE          = as.vector(SE(init_est)),
-      true_harvest    = x$true_harvest[[1]],
-      relative_bias   = (as.vector(init_est) / x$true_harvest[[1]]) - 1
+      scenario      = "1",
+      pop_size      = N,
+      p_sample      = NA_integer_,
+      resp_bias     = as.character(x$suc_resp_rate[[1]] / x$uns_resp_rate[[1]]),
+      resp_rate     = as.character(level),
+      est_harvest   = as.vector(init_est),
+      est_SE        = as.vector(SE(init_est)),
+      true_harvest  = thvst,
+      percent_error = (abs(est_harvest - thvst) / thvst) * 100
     )
   }
   return(out)

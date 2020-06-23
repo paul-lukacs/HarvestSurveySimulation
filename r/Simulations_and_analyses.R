@@ -9,9 +9,13 @@ library(tidyverse) ; library(survey)
 s1_estimates <- s1(respbias = seq(1, 1.4, 0.1), times = times) 
 
 # Summarise all those iterations:
-s1_averages <- s1_estimates %>% group_by(resp_bias) %>% 
+s1_averages <- s1_estimates %>% 
+  group_by(resp_bias) %>% 
   summarise(
-    mean_relative_bias = mean(relative_bias)
+    MAPE          = mean(percent_error),
+    mean_SE       = mean(est_SE),
+    relative_RMSE = ((est_harvest - true_harvest)^2 / true_harvest) %>% 
+      mean() %>% sqrt()
   )
 
 # Scenario 2 ===================================================================
@@ -22,9 +26,13 @@ s1_averages <- s1_estimates %>% group_by(resp_bias) %>%
 s2_estimates <- s2(times)
 
 # Summarise all those iterations:
-s2_averages <- s2_estimates %>% group_by(resp_bias) %>% 
+s2_averages <- s2_estimates %>% 
+  group_by(resp_bias) %>% 
   summarise(
-    mean_relative_bias = mean(relative_bias)
+    MAPE          = mean(percent_error),
+    mean_SE       = mean(est_SE),
+    relative_RMSE = ((est_harvest - true_harvest)^2 / true_harvest) %>% 
+      mean() %>% sqrt()
   )
 
 
@@ -36,9 +44,13 @@ s2_averages <- s2_estimates %>% group_by(resp_bias) %>%
 s3_estimates <- s3(respbias = seq(1, 1.4, 0.1), times = times)
 
 # Summarise all those iterations:
-s3_averages <- s3_estimates %>% group_by(resp_bias) %>% 
+s3_averages <- s3_estimates %>%
+  group_by(resp_bias) %>% 
   summarise(
-    mean_relative_bias = mean(relative_bias)
+    MAPE          = mean(percent_error),
+    mean_SE       = mean(est_SE),
+    relative_RMSE = ((est_harvest - true_harvest)^2 / true_harvest) %>% 
+      mean() %>% sqrt()
   )
 
 # Scenario 4 ===================================================================
@@ -47,9 +59,13 @@ s3_averages <- s3_estimates %>% group_by(resp_bias) %>%
 s4_estimates <- s4(respbias = seq(1, 1.4, 0.1), times = times)
 
 # Summarise all those iterations:
-s4_averages <- s4_estimates %>% group_by(resp_bias) %>% 
+s4_averages <- s4_estimates %>% 
+  group_by(resp_bias) %>% 
   summarise(
-    mean_relative_bias = mean(relative_bias)
+    MAPE          = mean(percent_error),
+    mean_SE       = mean(est_SE),
+    relative_RMSE = ((est_harvest - true_harvest)^2 / true_harvest) %>% 
+      mean() %>% sqrt()
   )
 
 # Scenario 5 ===================================================================
@@ -59,8 +75,12 @@ s4_averages <- s4_estimates %>% group_by(resp_bias) %>%
 s5_estimates <- s5(respbias = seq(1, 1.4, 0.1), times = times)
 
 # Summarise all those iterations:
-s5_averages <- s5_estimates %>% group_by(resp_bias) %>% 
+s5_averages <- s5_estimates %>%
+  group_by(resp_bias) %>% 
   summarise(
-    mean_relative_bias = mean(relative_bias)
+    MAPE          = mean(percent_error),
+    mean_SE       = mean(est_SE),
+    relative_RMSE = ((est_harvest - true_harvest)^2 / true_harvest) %>% 
+      mean() %>% sqrt()
   )
 
