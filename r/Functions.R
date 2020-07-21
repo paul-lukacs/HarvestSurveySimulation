@@ -259,7 +259,7 @@ return (out)
 # est() ========================================================================
 
 est <- function(simdat, poststrat = FALSE){
-
+  
   methods <- purrr::map(simdat, purrr::pluck, "method", 1)
   groups <- unlist(purrr::map(simdat, purrr::pluck, "group"))
   if (length(unique(groups)) != 2 & poststrat == TRUE) {
@@ -272,10 +272,10 @@ est <- function(simdat, poststrat = FALSE){
   if (typeof(poststrat) != "logical") {
     stop ("'poststrat' must be logical", call. = FALSE)
   }
-
-  # Mandatory estimates ========================================================
+  
   if (all(methods == "mandatory")){
-
+    # Mandatory estimates ========================================================
+    
     if (poststrat){
       poststrat <- NULL
       message(
@@ -283,7 +283,7 @@ est <- function(simdat, poststrat = FALSE){
                " ignored.")
       )
     }
-
+    
     est_mand <- function(sim_elmt){
       thvst <- sim_elmt$true_harvest[[1]]
       ests <- sim_elmt %>%
@@ -294,11 +294,12 @@ est <- function(simdat, poststrat = FALSE){
           est_SE       = 0L,
           ARE          = abs((est_harvest - thvst) / thvst),
           sqer         = ((est_harvest - thvst)^2),
+          Tresp        = sum(init_resp),
           .groups = "keep"
         )
       return(ests)
     }
-
+    
     out <- purrr::map_dfr(simdat, est_mand) %>%
       dplyr::summarise(
         method        = methods[[1]],
@@ -309,27 +310,28 @@ est <- function(simdat, poststrat = FALSE){
         mean_SE       = mean(est_SE),
         MARE          = mean(ARE),
         RRMSE         = sqrt(mean(sqer)) / mean(true_harvest),
+        total_resp    = mean(Tresp),
         .groups = "drop"
       )
-
+    
     out <- out %>%
       dplyr::mutate(resp_rate = as.character(resp_rate)) %>%
       dplyr::select(method:resp_bias, resp_rate, tidyselect::everything())
     return(out)
-
+    
   } else if (all(methods == "simple")) {
     # SRS estimates ============================================================
-
+    
     est_simp <- function(level, pop_dat){
       thvst <- pop_dat$true_harvest[[1]]
       N <- pop_dat$pop_size[[1]]
-
+      
       pop <- pop_dat %>%
         dplyr::filter(dplyr::near(uns_resp_rate, level))
-
+      
       init_resp_only <- pop %>%
         dplyr::filter(init_resp == 1)
-
+      
       init_design <- survey::svydesign(ids   = ~1,
                                        probs = nrow(init_resp_only) / N,
                                        data  = init_resp_only,
@@ -345,14 +347,14 @@ est <- function(simdat, poststrat = FALSE){
                                             partial = TRUE)
       }
       init_est <- survey::svytotal(~harvest, init_design)
-
+      
       if ("fus_resp" %in% names(pop)){
         # If level is 1, then there was nobody to follow up with, so
         # ignore this step.
         if (level < 1){
           fus_resp_only <- pop %>%
             dplyr::filter(fus_resp == 1)
-
+          
           fus_design <- survey::svydesign(ids   = ~1,
                                           probs = nrow(fus_resp_only) / N,
                                           data  = fus_resp_only,
@@ -364,15 +366,15 @@ est <- function(simdat, poststrat = FALSE){
                                                partial = TRUE)
           }
           fus_est <- survey::svytotal(~harvest, fus_design)
-
+          
           init_prop <- sum(pop$init_resp, na.rm = TRUE) / sum(pop$sample)
           # assume fus respondents make the rest of the pop:
           fus_prop  <- 1 - init_prop
           combined_est <- (init_est * init_prop) + (fus_est * fus_prop)
-
+          
           combined_SE <- (init_prop * survey::SE(init_est)) +
             (fus_prop * survey::SE(fus_est))
-
+          
           estout <- tibble::tibble(
             resp_rate    = as.character(level),
             resp_bias    = as.character(pop$resp_bias[[1]]),
@@ -380,7 +382,11 @@ est <- function(simdat, poststrat = FALSE){
             est_harvest  = as.vector(combined_est),
             est_SE       = as.vector(combined_SE),
             ARE          = abs((est_harvest - true_harvest) / true_harvest),
-            sqer         = ((est_harvest - true_harvest)^2)
+            sqer         = ((est_harvest - true_harvest)^2),
+            Tsamp        = sum(pop$sample),
+            Tresp        = sum(pop$init_resp, na.rm = TRUE),
+            FUcont       = sum(pop$sample) - sum(pop$init_resp, na.rm = TRUE),
+            FUTresp      = sum(pop$fus_resp, na.rm = TRUE)
           )
         } else {
           estout <- tibble::tibble(
@@ -390,7 +396,11 @@ est <- function(simdat, poststrat = FALSE){
             est_harvest  = as.vector(init_est),
             est_SE       = as.vector(survey::SE(init_est)),
             ARE          = abs((est_harvest - true_harvest) / true_harvest),
-            sqer         = ((est_harvest - true_harvest)^2)
+            sqer         = ((est_harvest - true_harvest)^2),
+            Tsamp        = sum(pop$sample),
+            Tresp        = sum(pop$init_resp, na.rm = TRUE),
+            FUcont       = NA,
+            FUTresp      = NA
           )
         }
       } else {
@@ -402,12 +412,16 @@ est <- function(simdat, poststrat = FALSE){
           est_harvest  = as.vector(init_est),
           est_SE       = as.vector(survey::SE(init_est)),
           ARE          = abs((est_harvest - true_harvest) / true_harvest),
-          sqer         = ((est_harvest - true_harvest)^2)
+          sqer         = ((est_harvest - true_harvest)^2),
+          Tsamp        = sum(pop$sample),
+          Tresp        = sum(pop$init_resp, na.rm = TRUE),
+          FUcont       = NA,
+          FUTresp      = NA
         )
       }
       return(estout)
     }
-
+    
     # Each element in 'simdat' must be split down to a single
     # level of response bias. This function does that, when it is the .f
     # argument in map()
@@ -419,10 +433,10 @@ est <- function(simdat, poststrat = FALSE){
       }
       return(pops)
     }
-
+    
     splits <- purrr::map(simdat, extractor) %>%
       purrr::flatten()
-
+    
     ests <- vector(mode = "list", length = length(splits))
     for (i in seq_along(splits)) {
       # This next line that contains unique() allows estimator() to further
@@ -442,26 +456,30 @@ est <- function(simdat, poststrat = FALSE){
         mean_SE       = mean(est_SE),
         MARE          = mean(ARE),
         RRMSE         = sqrt(mean(sqer)) / mean(true_harvest),
+        mean_sampled  = mean(Tsamp),
+        mean_respond  = mean(Tresp),
+        mean_fuscont  = mean(FUcont, na.rm = TRUE),
+        mean_fusresp  = mean(FUTresp, na.rm = TRUE),
         .groups = "drop"
       )
-
+    
     out <- out %>%
       dplyr::select(method, pop_size, resp_bias, resp_rate,
                     tidyselect::everything())
     return(out)
-
+    
   } else if (all(methods == "voluntary")){
     # Voluntary estimates ======================================================
     est_vol <- function(level, pop_dat){
       thvst <- pop_dat$true_harvest[[1]]
       N <- pop_dat$pop_size[[1]]
-
+      
       pop <- pop_dat %>%
         dplyr::filter(dplyr::near(uns_resp_rate, level))
-
+      
       init_resp_only <- pop %>%
         dplyr::filter(init_resp == 1)
-
+      
       init_design <- survey::svydesign(ids   = ~1,
                                        probs = nrow(init_resp_only) / N,
                                        data  = init_resp_only,
@@ -477,14 +495,14 @@ est <- function(simdat, poststrat = FALSE){
                                             partial = TRUE)
       }
       init_est <- survey::svytotal(~harvest, init_design)
-
+      
       if ("fus_resp" %in% names(pop)){
         # if response level was already 1, there is nobody to follow up with,
         # so skip this step:
         if (level < 1){
           fus_resp_only <- pop %>%
             dplyr::filter(fus_resp == 1)
-
+          
           fus_design <- survey::svydesign(ids   = ~1,
                                           probs = nrow(fus_resp_only) / N,
                                           data  = fus_resp_only,
@@ -496,17 +514,17 @@ est <- function(simdat, poststrat = FALSE){
                                                partial = TRUE)
           }
           fus_est <- survey::svytotal(~harvest, fus_design)
-
+          
           # The prop. of respondents to self-report IS the proportion
           # of the population who reported:
           init_prop <- mean(pop$init_resp, na.rm = TRUE)
           # assume fus respondents reflect the rest of the pop.
           fus_prop  <- 1 - init_prop
           combined_est <- (init_est * init_prop) + (fus_est * fus_prop)
-
+          
           combined_SE <- (init_prop * survey::SE(init_est)) +
             (fus_prop  * survey::SE(fus_est))
-
+          
           estout <- tibble::tibble(
             resp_rate    = as.character(level),
             resp_bias    = as.character(pop$resp_bias[[1]]),
@@ -514,7 +532,10 @@ est <- function(simdat, poststrat = FALSE){
             est_harvest  = as.vector(combined_est),
             est_SE       = as.vector(combined_SE),
             ARE          = abs((est_harvest - true_harvest) / true_harvest),
-            sqer         = ((est_harvest - true_harvest)^2)
+            sqer         = ((est_harvest - true_harvest)^2),
+            Tsamp        = sum(pop$fus_sample, na.rm = TRUE),
+            Tresp        = sum(pop$init_resp),
+            FUTresp      = sum(pop$fus_resp, na.rm = TRUE)
           )
         } else {
           estout <- tibble::tibble(
@@ -524,7 +545,10 @@ est <- function(simdat, poststrat = FALSE){
             est_harvest  = as.vector(init_est),
             est_SE       = as.vector(survey::SE(init_est)),
             ARE          = abs((est_harvest - true_harvest) / true_harvest),
-            sqer         = ((est_harvest - true_harvest)^2)
+            sqer         = ((est_harvest - true_harvest)^2),
+            Tsamp        = NA,
+            Tresp        = sum(pop$init_resp),
+            FUTresp      = NA
           )
         }
       } else {
@@ -536,12 +560,15 @@ est <- function(simdat, poststrat = FALSE){
           est_harvest  = as.vector(init_est),
           est_SE       = as.vector(survey::SE(init_est)),
           ARE          = abs((est_harvest - true_harvest) / true_harvest),
-          sqer         = ((est_harvest - true_harvest)^2)
+          sqer         = ((est_harvest - true_harvest)^2),
+          Tsamp        = NA,
+          Tresp        = sum(pop$init_resp),
+          FUTresp      = NA
         )
       }
       return(estout)
     }
-
+    
     # Each element in 'simdat' must be split down to a single
     # level of response bias. This function does that, when it is the .f
     # argument in map()
@@ -553,10 +580,10 @@ est <- function(simdat, poststrat = FALSE){
       }
       return(pops)
     }
-
+    
     splits <- purrr::map(simdat, extractor) %>%
       purrr::flatten()
-
+    
     ests <- vector(mode = "list", length = length(splits))
     for (i in seq_along(splits)) {
       # This next line that contains unique() allows estimator() to further
@@ -565,7 +592,7 @@ est <- function(simdat, poststrat = FALSE){
       ests[[i]] <- unique(splits[[i]]$uns_resp_rate) %>%
         purrr::map_dfr(est_vol, splits[[i]])
     }
-
+    
     out <- ests %>%
       dplyr::bind_rows() %>%
       dplyr::group_by(resp_bias, resp_rate) %>%
@@ -577,9 +604,12 @@ est <- function(simdat, poststrat = FALSE){
         mean_SE       = mean(est_SE),
         MARE          = mean(ARE),
         RRMSE         = sqrt(mean(sqer)) / mean(true_harvest),
+        mean_sampled  = mean(Tsamp, na.rm = TRUE),
+        mean_respond  = mean(Tresp, na.rm = TRUE),
+        mean_fusresp  = mean(FUTresp, na.rm = TRUE),
         .groups = "drop"
       )
-
+    
     out <- out %>%
       dplyr::select(method, pop_size, resp_bias, resp_rate,
                     tidyselect::everything())
@@ -589,3 +619,4 @@ est <- function(simdat, poststrat = FALSE){
                  " mand(), simple(), or vol()."))
   }
 }
+

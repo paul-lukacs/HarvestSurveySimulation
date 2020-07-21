@@ -1,4 +1,4 @@
-memory.limit(size = 15000)
+memory.limit(size = 20000)
 
 # Simulation params ============================================================
 n <- 8000                  # pop size
@@ -6,8 +6,8 @@ split <- 0.7               # Prob of hunter being in group 1
 success1 <- 0.25           # Prob of group 1 hunter harvesting
 success0 <- 0.6            # Avg. harvest of 35.5% b/w groups
 sample <- 0.5              # Prob of sample in SRS scenarios
-resp <- seq(0.2, 1, 0.2)   # Prob of response  
-bias <- seq(1, 1.3, 0.1)   # Resp. bias for successful hunters. SRS and vol only
+resp <- c(0.2, 0.4, 0.6, 0.8, 0.9, 1)   # Prob of response  
+bias <- seq(1, 1.4, 0.1)   # Resp. bias for successful hunters. SRS and vol only
 times <- 100               # # of times to repeat simulations.
 
 # Create initial pop:
@@ -24,7 +24,7 @@ s2_est <- est(s2_pop)
 MAREplot(s2_est, "2: SRS without follow up")
 
 # s3: SRS, follow, no poststrat ================================================
-# 1/2 as likely to respond to follow up survey than to intitial
+# 1/2 as likely to respond to follow up survey than to initial
 s3_pop <- simple(init, sample, resp, bias, fus = T, fus_scale = 0.5, times)
 s3_est <- est(s3_pop)
 MAREplot(s3_est, "3: SRS with follow up")
