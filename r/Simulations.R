@@ -1,4 +1,4 @@
-memory.limit(size = 20000)
+memory.limit(size = 15000)
 
 # Simulation params ============================================================
 n <- 8000                  # pop size
@@ -16,7 +16,7 @@ init <- pop(n, split, success1, success0)
 # s1: Mandatory reporting ======================================================
 s1_pop <- mand(init, resp, times)
 s1_est <- est(s1_pop)
-MAREplot(s1_est, "1: Mandatory")
+MAREplot(s1_est, "1: mandatory")
 
 # s2: SRS, no follow, no poststrat =============================================
 s2_pop <- simple(init, sample, resp, bias, times = times)
