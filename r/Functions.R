@@ -40,26 +40,46 @@ pop <- function(n, split = 1, success1, success0 = success1){
 
 # mand() =======================================================================
 
-mand <- function(pop, resp, times = 1){
-  if (any(resp > 1) | any(resp < 0)) {
-    stop ("'resp' must be a proportion.", call. = FALSE)
+mand <- function(pop, resp, bias, fus_sample, fus_scale, times = 1){
+  
+  lr <- length(resp)
+  lb <- length(bias)
+  N <- pop$pop_size[[1]]
+  
+  changeto1 <- function(x) {
+    case_when(
+      x > 1 ~ 1,
+      TRUE  ~ x
+    )
   }
-  n <- pop$pop_size[[1]]
+  
   survsim <- function(fillthis){
-    full_sim <- purrr::map_dfr(seq_along(resp), ~ pop) %>%
-      mutate(
-        method    = "mandatory",
-        resp_rate = rep(resp, each = n),
-        init_resp =
-          case_when(
-            harvest == 1 ~ rbinom(n*length(resp), 1, resp_rate),
-            harvest == 0 ~ 0L
-          )
+    full_sim <- map_dfr(1:(lr * lb), ~pop)
+    full_sim <- mutate(
+      full_sim,
+      method = "mandatory",
+      resp_bias = rep(bias, each = N * lr),
+      resp_rate = rep(resp, each = N, times = lb),
+      init_resp = case_when(
+        harvest == 1 ~ rbinom(nrow(full_sim), 1, resp_rate),
+        harvest == 0 ~ 0L
+      ),
+      fus_sample = case_when(
+        init_resp == 1 ~ NA_integer_,
+        init_resp == 0 ~ rbinom(nrow(full_sim), 1, fus_sample)),
+      fus_uns_resp_rate = resp_rate * fus_scale,
+      fus_uns_resp_rate = changeto1(fus_uns_resp_rate),
+      fus_suc_resp_rate = resp_rate * resp_bias * fus_scale,
+      fus_suc_resp_rate = changeto1(fus_suc_resp_rate),
+      fus_resp = case_when(
+        init_resp == 1 ~ NA_integer_,
+        fus_sample == 0 ~ NA_integer_,
+        harvest == 1 ~ rbinom(nrow(full_sim), 1, fus_suc_resp_rate),
+        harvest == 0 ~ rbinom(nrow(full_sim), 1, fus_uns_resp_rate)
       )
-    full_sim <- full_sim %>%
-      select(method, pop_size, true_harvest, tidyselect::everything())
-    return(full_sim)
+    )
   }
+  
   out <- purrr::map(1:times, survsim)
   names(out) <- paste("Response sim", 1:length(out))
   return(out)
@@ -184,9 +204,9 @@ vol <- function(pop, resp, bias, fus = FALSE,
           call. = FALSE)
   }
   if (!is.null(fus_scale)){
-    if (fus_scale < 1){
+    if (fus_scale > 1){
       message(
-        paste0("fus_scale < 1; Hunters less likely to respond to follow up",
+        paste0("fus_scale > 1; Hunters more likely to respond to follow up",
                " than to voluntarily report")
       )
     }
@@ -274,51 +294,98 @@ est <- function(simdat, poststrat = FALSE){
   }
   
   if (all(methods == "mandatory")){
-    # Mandatory estimates ========================================================
+    # Mandatory estimates ======================================================
     
-    if (poststrat){
-      poststrat <- NULL
-      message(
-        paste0("Cannot post-stratify a mand() simulation, 'poststrat = TRUE'",
-               " ignored.")
+    est_mand <- function(level, pop_dat){
+    thvst <- pop_dat$true_harvest[[1]]
+    N <- pop_dat$pop_size[[1]]
+    
+    pop <- pop_dat %>%
+      dplyr::filter(dplyr::near(resp_rate, level))
+    
+    init_est <- sum(pop$init_resp)
+    
+    if ("fus_resp" %in% names(pop)){
+      fus_resp_only <- pop %>%
+        dplyr::filter(fus_resp == 1)
+      
+      fus_resp_only <- dplyr::mutate(
+        fus_resp_only,
+        fpc = N - sum(pop$init_resp)
       )
+      
+      fus_design <- survey::svydesign(ids   = ~1,
+                                      probs = nrow(fus_resp_only) / 
+                                        (N - sum(pop$init_resp)),
+                                      data  = fus_resp_only,
+                                      fpc   = ~fpc)
+      
+      fus_est <- survey::svytotal(~harvest, fus_design)
     }
     
-    est_mand <- function(sim_elmt){
-      thvst <- sim_elmt$true_harvest[[1]]
-      ests <- sim_elmt %>%
-        dplyr::group_by(resp_rate) %>%
-        dplyr::summarise(
-          true_harvest = thvst,
-          est_harvest  = sum(init_resp, na.rm = TRUE),
-          est_SE       = 0L,
-          ARE          = abs((est_harvest - thvst) / thvst),
-          sqer         = ((est_harvest - thvst)^2),
-          Tresp        = sum(init_resp),
-          .groups = "keep"
-        )
-      return(ests)
+    combined_est <- init_est + fus_est
+    
+    estout <- tibble::tibble(
+      resp_rate    = as.character(level),
+      resp_bias    = as.character(pop$resp_bias[[1]]),
+      true_harvest = thvst,
+      est_harvest  = as.vector(combined_est),
+      est_SE       = as.vector(survey::SE(fus_est)),
+      ARE          = abs((est_harvest - true_harvest) / true_harvest),
+      sqer         = ((est_harvest - true_harvest)^2),
+      Tresp        = sum(pop$init_resp, na.rm = TRUE),
+      FUTsamp      = sum(pop$fus_sample, na.rm = TRUE),
+      FUTresp      = sum(pop$fus_resp, na.rm = TRUE)
+    )  
+    return(estout)
+  } 
+  
+  
+  # Each element in 'simdat' must be split down to a single
+  # level of response bias. This function does that, when it is the .f
+  # argument in map()
+  extractor <- function(sim_elmt){
+    unq_bias <- unique(sim_elmt$resp_bias)
+    pops <- vector(mode = "list", length = length(unq_bias))
+    for (i in seq_along(unq_bias)){
+      pops[[i]] <- dplyr::filter(sim_elmt, resp_bias == unq_bias[[i]])
     }
-    
-    out <- purrr::map_dfr(simdat, est_mand) %>%
-      dplyr::summarise(
-        method        = methods[[1]],
-        pop_size      = purrr::pluck(simdat, 1, "pop_size", 1),
-        resp_bias     = NA_character_,
-        true_hvst     = mean(true_harvest),
-        mean_hvst_est = mean(est_harvest),
-        mean_SE       = mean(est_SE),
-        MARE          = mean(ARE),
-        RRMSE         = sqrt(mean(sqer)) / mean(true_harvest),
-        total_resp    = mean(Tresp),
-        .groups = "drop"
-      )
-    
-    out <- out %>%
-      dplyr::mutate(resp_rate = as.character(resp_rate)) %>%
-      dplyr::select(method:resp_bias, resp_rate, tidyselect::everything())
-    return(out)
-    
+    return(pops)
+  }
+  
+  splits <- purrr::map(simdat, extractor) %>%
+    purrr::flatten()
+  
+  ests <- vector(mode = "list", length = length(splits))
+  for (i in seq_along(splits)) {
+    # This next line that contains unique() allows estimator() to further
+    # filter data down to a single resp_rate, and therefore a single
+    # population to create estimates from.
+    ests[[i]] <- unique(splits[[i]]$resp_rate) %>%
+      purrr::map_dfr(est_mand, splits[[i]])
+  }
+  
+  out <- ests %>%
+    dplyr::bind_rows() %>%
+    dplyr::group_by(resp_bias, resp_rate) %>%
+    dplyr::summarise(
+      method        = "mandatory",
+      pop_size      = simdat[[1]]$pop_size[[1]],
+      true_hvst     = true_harvest[[1]],
+      mean_hvst_est = mean(est_harvest),
+      mean_SE       = mean(est_SE),
+      MARE          = mean(ARE),
+      RRMSE         = sqrt(mean(sqer)) / mean(true_hvst),
+      mean_respond  = mean(Tresp),
+      mean_sampled  = mean(FUTsamp),
+      mean_fusresp = mean(FUTresp),
+      .groups = "drop"
+    )
+  
+  out <- out %>%
+    dplyr::select(method, pop_size, resp_bias, resp_rate,
+                  tidyselect::everything())
+  return(out)
   } else if (all(methods == "simple")) {
     # SRS estimates ============================================================
     
@@ -439,7 +506,7 @@ est <- function(simdat, poststrat = FALSE){
     
     ests <- vector(mode = "list", length = length(splits))
     for (i in seq_along(splits)) {
-      # This next line that contains unique() allows estimator() to further
+      # This next line that contains unique() allows est_simp() to further
       # filter data down to a single resp_rate, and therefore a single
       # population to create estimates from.
       ests[[i]] <- unique(splits[[i]]$uns_resp_rate) %>%
@@ -586,7 +653,7 @@ est <- function(simdat, poststrat = FALSE){
     
     ests <- vector(mode = "list", length = length(splits))
     for (i in seq_along(splits)) {
-      # This next line that contains unique() allows estimator() to further
+      # This next line that contains unique() allows est_vol() to further
       # filter data down to a single resp_rate, and therefore a single
       # population to create estimates from.
       ests[[i]] <- unique(splits[[i]]$uns_resp_rate) %>%
