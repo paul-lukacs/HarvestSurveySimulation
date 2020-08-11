@@ -65,11 +65,11 @@ RRMSEplot_all <- function(dat) {
 all_ests %>% 
   mutate(resp_bias = as.double(resp_bias),
          scen = case_when(
-           scen == "1" ~ "1: Mandatory harvest reporting with follow up",
-           scen == "2" ~ "2: Simple random sample",
-           scen == "3" ~ "3: Simple random sample with follow up",
-           scen == "4" ~ "4: Voluntary",
-           scen == "5" ~ "5: Voluntary with follow up",
+           scen == "1" ~ "1: mandatory harvest reporting with follow up",
+           scen == "2" ~ "2: simple random sample",
+           scen == "3" ~ "3: simple random sample with follow up",
+           scen == "4" ~ "4: voluntary reporting",
+           scen == "5" ~ "5: voluntary with follow up",
          )) %>% 
   group_by(scen, resp_bias) %>% 
   summarise(RRMSE = mean(RRMSE)) %>% 
@@ -132,7 +132,7 @@ SEplot_line <- function(dat) {
          title = "Standard error of estimates",
          color = "Scenario") +
     theme(text = element_text(size = 14),
-          legend.position = c(0.18, 0.4),
+          legend.position = "right",
           plot.title = element_text("serif", face = "bold", size = 16),
           plot.subtitle = element_text("serif", face = "italic", size = 12),
           plot.background = element_rect(fill = "white"),
@@ -141,18 +141,19 @@ SEplot_line <- function(dat) {
           panel.grid.major.x = element_line(color = NA),
           axis.line.y = element_line(color = "white"),
           legend.title = element_text(size = 12),
-          legend.background = element_rect(fill = "#e8e8e8", color = "black"),
+          legend.background = element_rect(fill = NA, color = "black"),
+          legend.key = element_rect(fill = NA),
           plot.title.position = "plot")
 }
 all_ests %>% 
   
   group_by(scen, resp_bias) %>% 
   mutate(scen = case_when(
-           scen == "1" ~ "1: Mandatory harvest reporting\nwith follow up\n",
-           scen == "2" ~ "2: Simple random sample\n",
-           scen == "3" ~ "3: Simple random sample\nwith follow up\n",
-           scen == "4" ~ "4: Voluntary\n",
-           scen == "5" ~ "5: Voluntary with follow up\n",
+           scen == "1" ~ "1: mandatory harvest\nreporting with follow up\n",
+           scen == "2" ~ "2: simple random sample\n",
+           scen == "3" ~ "3: simple random sample\nwith follow up\n",
+           scen == "4" ~ "4: voluntary reporting\n",
+           scen == "5" ~ "5: voluntary with follow up",
          )) %>% 
   summarise(mean_SE = mean(mean_SE)) %>% 
   SEplot_line()
@@ -223,7 +224,8 @@ MAPE_facetedline <- function(dat) {
       panel.grid.minor.x = element_line(color = NA),
       axis.line.y = element_line(color = "white"),
       legend.title = element_text(size = 12),
-      legend.background = element_rect(fill = "#e8e8e8", color = "black"),
+      legend.background = element_rect(fill = NA, color = "black"),
+      legend.key = element_rect(fill = NA),
       plot.title.position = "plot"
     )
 }
@@ -233,7 +235,7 @@ all_ests %>%
       scen == "1" ~ "Scenario 1: mandatory harvest reporting with follow up",
       scen == "2" ~ "Scenario 2: simple random sample",
       scen == "3" ~ "Scenario 3: simple random sample with follow up",
-      scen == "4" ~ "Scenario 4: voluntary",
+      scen == "4" ~ "Scenario 4: voluntary reporting",
       scen == "5" ~ "Scenario 5: voluntary with follow up",
     )) %>% 
   group_by(scen, resp_bias, resp_rate) %>% 
