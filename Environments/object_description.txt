@@ -1,0 +1,1 @@
+'all_*k' objects are objects of all scenarios of *k in one data frame. 'init' objects are initial populations used. 's*_est' are objects that report averages across the three population levels for their respective scenario. 's*_est_*k_all' are estimates for the respective scenario and population.

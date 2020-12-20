@@ -1,5 +1,4 @@
-memory.limit(size = 20000)
-
+memory.limit(size = 120000)
 # Simulation params ============================================================
 n <- 10000                 # pop size
 split <- 0.7               # Prob of hunter being in group 1
@@ -32,7 +31,7 @@ s4_pop <- vol(init, resp, bias, times = times)
 s4_est <- est(s4_pop)
 
 # s5: vol/mandatory for all, follow, no ps =====================================
-s5_pop <- vol(init, resp, bias = seq(0.8, 1.4, 0.1), fus = TRUE, 
+s5_pop <- vol(init, resp, bias, fus = TRUE, 
               fus_scale = 0.7, fus_sample = 0.3, times = times)
 s5_est <- est(s5_pop)
 
