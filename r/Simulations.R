@@ -1,37 +1,111 @@
-memory.limit(size = 120000)
-# Simulation params ============================================================
-n <- 10000                 # pop size
-split <- 0.7               # Prob of hunter being in group 1
-success1 <- 0.3            # Prob of group 1 hunter harvesting
-success0 <- 0.5            # Avg. harvest of 36% b/w groups
-sample <- 0.5              # Prob of sample in SRS scenarios
-resp <- c(0.2, 0.4, 0.6, 0.8, 0.9, 1)   # Prob of response  
-bias <- seq(1, 1.4, 0.1)   # Resp. bias for successful hunters. SRS and vol only
-times <- 100               # # of times to repeat simulations.
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# HUNTER HARVEST SURVEY SIMULATIONS
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# run if not installed:
+# devtools::install_github("peterdonati/hhss")
+library(hhss)
 
-# Create initial pop:
-init <- pop(n, split, success1, success0)
+# Simulation parameters ========================================================
+split <- 0.7                          # Prob of hunter being in group 1
+success1 <- 0.3                       # Prob of group 1 hunter harvesting
+success0 <- 0.5                       # Avg. harvest of 36% b/w groups
+sample <- 0.5                         # Prob of sample in SRS scenarios
+resp <- c(0.2, 0.4, 0.6, 0.8, 0.9, 1) # Prob of response
+times <- 100                          # repetitions
+fus_scale <- 0.7                      # 30% less likely to respond to follow-up
+fus_sample <- 0.3                     # sample 30% of non-reporters. 
 
-# s1: Mandatory reporting ======================================================
-s1_pop <- mand(init, resp, bias = seq(0.8, 1.4, 0.1), fus_sample = 0.3,
-               fus_scale = 0.7, times)
-s1_est <- est(s1_pop)
+# Population creations==========================================================
+init_10k <- pop(10000, split, success1, success0)
+init_50k <- pop(50000, split, success1, success0)
+init_100k <- pop(100000, split, success1, success0)
 
-# s2: SRS, no follow, no poststrat =============================================
-s2_pop <- simple(init, sample, resp, bias, times = times)
-s2_est <- est(s2_pop)
+# Surveys ======================================================================
+{
+# s1: Mandatory for successful, follow up of non-reporters =====================
+s1_func <- function(pop){
+  mand(pop, resp = resp, fus = T, bias = seq(0.8, 1.4, 0.1),
+       fus_sample = fus_sample, fus_scale = fus_scale, times = times)
+}
 
-# s3: SRS, follow, no poststrat ================================================
-# 1/2 as likely to respond to follow up survey than to initial
-s3_pop <- simple(init, sample, resp, bias, fus = T, fus_scale = 0.7, times)
-s3_est <- est(s3_pop)
+s1 <- list(
+  s1_10k = s1_func(init_10k), 
+  s1_50k = s1_func(init_50k), 
+  s1_100k = s1_func(init_100k)
+)
 
-# s4: Voluntary/mandatory for all, no follow, no ps ============================
-s4_pop <- vol(init, resp, bias, times = times)
-s4_est <- est(s4_pop)
+# s2: SRS ======================================================================
+s2_func <- function(pop){
+  simple(pop, sample = sample, resp = resp, 
+         bias = seq(1, 1.4, 0.1), times = times)
+  
+}
 
-# s5: vol/mandatory for all, follow, no ps =====================================
-s5_pop <- vol(init, resp, bias, fus = TRUE, 
-              fus_scale = 0.7, fus_sample = 0.3, times = times)
-s5_est <- est(s5_pop)
+s2 <- list(
+  s2_10k = s2_func(init_10k), 
+  s2_50k = s2_func(init_50k), 
+  s2_100k = s2_func(init_100k)
+)
 
+# s3: SRS w/ follow-up =========================================================
+s3_func <- function(pop){
+  simple(pop, sample = sample, resp = resp, 
+         bias = seq(1, 1.4, 0.1), fus = T, fus_scale = fus_scale, 
+         times = times)
+}
+
+s3 <- list(
+  s3_10k = s3_func(init_10k), 
+  s3_50k = s3_func(init_50k), 
+  s3_100k = s3_func(init_100k)
+)
+
+# s4: voluntary ================================================================
+s4_func <- function(pop){
+  vol(pop, resp = resp, bias = seq(1, 1.4, 0.1), times = times)
+}
+
+s4 <- list(
+  s4_10k = s4_func(init_10k), 
+  s4_50k = s4_func(init_50k), 
+  s4_100k = s4_func(init_100k)
+)
+
+# s5: voluntary w/ follow-up ===================================================
+s5_func <- function(pop){
+  vol(pop, resp = resp, bias = seq(1, 1.4, 0.1), fus = TRUE, 
+      fus_sample = fus_sample, fus_scale = fus_scale, times = times)
+}
+
+s5 <- list(
+  s5_10k = s5_func(init_10k), 
+  s5_50k = s5_func(init_50k), 
+  s5_100k = s5_func(init_100k)
+)
+}
+
+# Estimates ====================================================================
+est_list <- function(input, scenario){
+  out <- purrr::map(input, est)
+  out <- purrr::map(out, dplyr::mutate, scen = scenario)
+  names(out) <- paste0(names(input), "_est")
+  return(out)
+}
+
+{
+# s1 ===========================================================================
+s1_ests <- est_list(s1, 1)
+
+# s2 ===========================================================================
+s2_ests <- est_list(s2, 2)
+
+# s3 ===========================================================================
+s3_ests <- est_list(s3, 3)
+
+# s4 ===========================================================================
+s4_ests <- est_list(s4, 4)
+
+# s5 ===========================================================================
+s5_ests <- est_list(s5, 5)
+}
