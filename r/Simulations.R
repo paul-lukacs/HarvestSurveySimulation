@@ -2,31 +2,31 @@
 # HUNTER HARVEST SURVEY SIMULATIONS
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
-# run if not installed:
+# run if not installed, or not on Version 1.0.0:
 # devtools::install_github("peterdonati/hhss")
 library(hhss)
 
 # Simulation parameters ========================================================
 split <- 0.7                          # Prob of hunter being in group 1
 success1 <- 0.3                       # Prob of group 1 hunter harvesting
-success0 <- 0.5                       # Avg. harvest of 36% b/w groups
+success2 <- 0.5                       # Avg. harvest of 36% b/w groups
 sample <- 0.5                         # Prob of sample in SRS scenarios
 resp <- c(0.2, 0.4, 0.6, 0.8, 0.9, 1) # Prob of response
 times <- 100                          # repetitions
-fus_scale <- 0.7                      # 30% less likely to respond to follow-up
-fus_sample <- 0.3                     # sample 30% of non-reporters. 
+fol_scale <- 0.7                      # 30% less likely to respond to follow-up
+fol_sample <- 0.3                     # sample 30% of non-reporters. 
 
 # Population creations==========================================================
-init_10k <- pop(10000, split, success1, success0)
-init_50k <- pop(50000, split, success1, success0)
-init_100k <- pop(100000, split, success1, success0)
+init_10k <- pop(10000, split, success1, success2)
+init_50k <- pop(50000, split, success1, success2)
+init_100k <- pop(100000, split, success1, success2)
 
 # Surveys ======================================================================
 {
 # s1: Mandatory for successful, follow up of non-reporters =====================
 s1_func <- function(pop){
-  mand(pop, resp = resp, fus = T, bias = seq(0.8, 1.4, 0.1),
-       fus_sample = fus_sample, fus_scale = fus_scale, times = times)
+  mand(pop, resp = resp, fol = T, bias = seq(0.8, 1.4, 0.1),
+       fol_sample = fol_sample, fol_scale = fol_scale, times = times)
 }
 
 s1 <- list(
@@ -51,7 +51,7 @@ s2 <- list(
 # s3: SRS w/ follow-up =========================================================
 s3_func <- function(pop){
   simple(pop, sample = sample, resp = resp, 
-         bias = seq(1, 1.4, 0.1), fus = T, fus_scale = fus_scale, 
+         bias = seq(1, 1.4, 0.1), fol = T, fol_scale = fol_scale, 
          times = times)
 }
 
@@ -61,9 +61,9 @@ s3 <- list(
   s3_100k = s3_func(init_100k)
 )
 
-# s4: voluntary ================================================================
+# s4: census ===================================================================
 s4_func <- function(pop){
-  vol(pop, resp = resp, bias = seq(1, 1.4, 0.1), times = times)
+  census(pop, resp = resp, bias = seq(1, 1.4, 0.1), times = times)
 }
 
 s4 <- list(
@@ -72,10 +72,10 @@ s4 <- list(
   s4_100k = s4_func(init_100k)
 )
 
-# s5: voluntary w/ follow-up ===================================================
+# s5: census w/ follow-up ======================================================
 s5_func <- function(pop){
-  vol(pop, resp = resp, bias = seq(1, 1.4, 0.1), fus = TRUE, 
-      fus_sample = fus_sample, fus_scale = fus_scale, times = times)
+  census(pop, resp = resp, bias = seq(1, 1.4, 0.1), fol = TRUE, 
+      fol_sample = fol_sample, fol_scale = fol_scale, times = times)
 }
 
 s5 <- list(
